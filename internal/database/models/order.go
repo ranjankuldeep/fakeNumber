@@ -22,7 +22,7 @@ type Order struct {
 }
 
 // NewOrderCollection initializes and returns the orders collection with indexes if needed
-func NewOrderCollection(db *mongo.Database) *mongo.Collection {
+func InitializeOrderCollection(db *mongo.Database) *mongo.Collection {
 	collection := db.Collection("orders")
 
 	// Optionally, create indexes here if needed

@@ -11,7 +11,7 @@ import (
 // Server represents the structure of the server document
 type Server struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty"`
-	Server       int                `bson:"server" json:"server" validate:"required"`
+	ServerNumber int                `bson:"server" json:"server" validate:"required"`
 	Maintenance  bool               `bson:"maintainance" json:"maintainance" default:"false"`
 	APIKey       string             `bson:"api_key,omitempty" json:"api_key"`
 	Token        string             `bson:"token,omitempty" json:"token"`

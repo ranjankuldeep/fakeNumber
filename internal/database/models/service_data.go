@@ -23,7 +23,7 @@ type ServerList struct {
 	Name        string             `bson:"name" json:"name"`
 	LowestPrice string             `bson:"lowestPrice" json:"lowestPrice"`   // New field
 	ServiceCode string             `bson:"service_code" json:"service_code"` // New field
-	Servers     []Server           `bson:"servers" json:"servers"`
+	Servers     []ServerData       `bson:"servers" json:"servers"`
 	CreatedAt   time.Time          `bson:"createdAt,omitempty" json:"createdAt"`
 	UpdatedAt   time.Time          `bson:"updatedAt,omitempty" json:"updatedAt"`
 }

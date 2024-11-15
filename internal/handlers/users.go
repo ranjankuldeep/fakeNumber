@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -231,12 +232,14 @@ func GoogleLogin(c echo.Context) error {
 
 	var body RequestBody
 	if err := c.Bind(&body); err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 	}
 
 	// Fetch user data from Google
 	profile, err := fetchGoogleUserProfile(body.Token)
 	if err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Failed to fetch user data"})
 	}
 
@@ -245,15 +248,17 @@ func GoogleLogin(c echo.Context) error {
 	filter := bson.M{"email": profile["email"]}
 	var user models.User
 	err = userCollection.FindOne(context.TODO(), filter).Decode(&user)
-	if err != nil || user.GoogleID == "" {
+	if err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "User not found, Please register."})
 	}
 
 	// Fetch wallet details
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
 	var apiWallet models.ApiWalletUser
-	err = apiWalletColl.FindOne(context.TODO(), bson.M{"userId": user.ID.Hex()}).Decode(&apiWallet)
+	err = apiWalletColl.FindOne(context.TODO(), bson.M{"userId": user.ID}).Decode(&apiWallet)
 	if err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch wallet details"})
 	}
 

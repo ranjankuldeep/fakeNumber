@@ -17,11 +17,12 @@ type ServerData struct {
 
 // ServerList represents the main structure for the server list document
 type ServerList struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty"`
-	Name      string             `bson:"name" json:"name"`
-	Servers   []ServerData       `bson:"servers" json:"servers"`
-	CreatedAt time.Time          `bson:"createdAt,omitempty" json:"createdAt"`
-	UpdatedAt time.Time          `bson:"updatedAt,omitempty" json:"updatedAt"`
+	ID           primitive.ObjectID `bson:"_id,omitempty"`
+	Name         string             `bson:"name" json:"name"`
+	Service_Code string             `bson:"service_code" json:"service_code"`
+	Servers      []ServerData       `bson:"servers" json:"servers"`
+	CreatedAt    time.Time          `bson:"createdAt,omitempty" json:"createdAt"`
+	UpdatedAt    time.Time          `bson:"updatedAt,omitempty" json:"updatedAt"`
 }
 
 // InitializeServerListCollection initializes the collection for "ServerList"

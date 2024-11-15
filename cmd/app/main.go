@@ -49,12 +49,9 @@ var (
 
 func main() {
 	Load(".env")
-
 	e := echo.New()
 
 	uri := "mongodb+srv://test2:amardeep885@cluster0.blfflhg.mongodb.net/Express-Backend?retryWrites=true&w=majority"
-
-	// Use CORS middleware to allow all origins
 
 	// CORS middleware to allow only http://localhost:5173
 	// Configure CORS to allow requests from http://localhost:5173 with credentials
@@ -82,8 +79,10 @@ func main() {
 			return next(c)
 		}
 	})
-	routes.RegisterRoutes(e)
+	routes.RegisterServiceRoutes(e)
+	routes.RegisterDataRoutes(e)
 	routes.RegisterUserRoutes(e)
 	routes.RegisterWalletRoutes(e)
+
 	e.Logger.Fatal(e.Start(":8000"))
 }

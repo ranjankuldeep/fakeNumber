@@ -32,10 +32,10 @@ type TransactionHistory struct {
 
 // InitializeRechargeHistoryCollection initializes the recharge history collection
 func InitializeRechargeHistoryCollection(db *mongo.Database) *mongo.Collection {
-	return db.Collection("rechargeHistory")
+	return db.Collection("rechargehistories")
 }
 
 // InitializeTransactionHistoryCollection initializes the transaction history collection
 func InitializeTransactionHistoryCollection(db *mongo.Database) *mongo.Collection {
-	return db.Collection("transactionHistory")
+	return db.Collection("transactionhistories")
 }

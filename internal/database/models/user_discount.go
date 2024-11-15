@@ -13,7 +13,7 @@ type UserDiscount struct {
 	UserID    primitive.ObjectID `bson:"userId" json:"userId" validate:"required"`
 	Service   string             `bson:"service" json:"service" validate:"required"`
 	Server    int                `bson:"server" json:"server" validate:"required"`
-	Discount  int                `bson:"discount,omitempty" json:"discount" default:"0"`
+	Discount  float64            `bson:"discount,omitempty" json:"discount" default:"0"`
 	CreatedAt time.Time          `bson:"createdAt,omitempty" json:"createdAt"`
 	UpdatedAt time.Time          `bson:"updatedAt,omitempty" json:"updatedAt"`
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -191,9 +192,14 @@ func GoogleSignup(c echo.Context) error {
 		// Generate API key and wallet
 		apiKey := generateAPIKey()
 
+		wallet, err := lib.GenerateTronAddress()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to generate TRON wallet"})
+		}
+
 		// todo
-		trxAddress := "sample_trx_address"    // Replace with your implementation
-		trxPrivateKey := "sample_private_key" // Replace with your implementation
+		trxAddress := wallet["address"]
+		trxPrivateKey := wallet["privateKey"]
 
 		apiWallet := models.ApiWalletUser{
 			UserID:        newUser.ID,

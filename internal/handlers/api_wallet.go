@@ -32,7 +32,7 @@ func checkMaintenance(ctx context.Context, serverCol *mongo.Collection) (bool, e
 // Handler to retrieve API key
 func APIKeyHandler(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	serverCol := models.InitializeServerCollection(db)
+	// serverCol := models.InitializeServerCollection(db)
 	walletCol := models.InitializeApiWalletuserCollection(db)
 
 	userId := c.QueryParam("userId")
@@ -43,17 +43,17 @@ func APIKeyHandler(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	isMaintenance, err := checkMaintenance(ctx, serverCol)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-	}
-	if isMaintenance {
-		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
-	}
+	// isMaintenance, err := checkMaintenance(ctx, serverCol)
+	// if err != nil {
+	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	// }
+	// if isMaintenance {
+	// 	return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
+	// }
 
 	var user models.ApiWalletUser
 	objID, _ := primitive.ObjectIDFromHex(userId)
-	err = walletCol.FindOne(ctx, bson.M{"userId": objID}).Decode(&user)
+	err := walletCol.FindOne(ctx, bson.M{"userId": objID}).Decode(&user)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
 	}
@@ -63,7 +63,7 @@ func APIKeyHandler(c echo.Context) error {
 // Handler to retrieve balance
 func BalanceHandler(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	serverCol := models.InitializeServerCollection(db)
+	// serverCol := models.InitializeServerCollection(db)
 	walletCol := models.InitializeApiWalletuserCollection(db)
 
 	apiKey := c.QueryParam("api_key")
@@ -74,16 +74,16 @@ func BalanceHandler(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	isMaintenance, err := checkMaintenance(ctx, serverCol)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-	}
-	if isMaintenance {
-		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
-	}
+	// isMaintenance, err := checkMaintenance(ctx, serverCol)
+	// if err != nil {
+	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	// }
+	// if isMaintenance {
+	// 	return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
+	// }
 
 	var user models.ApiWalletUser
-	err = walletCol.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&user)
+	err := walletCol.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&user)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
 	}

@@ -260,7 +260,6 @@ func GetServiceData(c echo.Context) error {
 		})
 	}
 
-	logs.Logger.Info(filteredData)
 	// Sort the data by service name
 	sort.Slice(filteredData, func(i, j int) bool {
 		return filteredData[i].Name < filteredData[j].Name

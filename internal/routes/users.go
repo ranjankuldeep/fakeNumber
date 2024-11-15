@@ -7,6 +7,6 @@ import (
 
 // RegisterRoutes sets up the routes for the application
 func RegisterUserRoutes(e *echo.Echo) {
-	e.POST("/google-signup", handlers.GoogleSignup)
-	e.POST("/google-login", handlers.GoogleLogin)
+	e.POST("/api/google-signup", handlers.GoogleSignup)
+	e.POST("/api/google-login", handlers.GoogleLogin)
 }

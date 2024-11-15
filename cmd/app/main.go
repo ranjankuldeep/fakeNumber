@@ -56,9 +56,13 @@ func main() {
 	// use the echo logger
 	e.Use(middleware.Logger())
 	// Use CORS middleware to allow all origins
+	// CORS middleware to allow only http://localhost:5173
+	// Configure CORS to allow requests from http://localhost:5173 with credentials
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
-		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowOrigins:     []string{"http://localhost:5173"}, // Allow only localhost:5173
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     []string{"Authorization", "Content-Type"},
+		AllowCredentials: true, // Enable credentials
 	}))
 
 	// Connect to the MongoDB client
@@ -79,5 +83,6 @@ func main() {
 		}
 	})
 	routes.RegisterRoutes(e)
+	routes.RegisterUserRoutes(e)
 	e.Logger.Fatal(e.Start(":8000"))
 }

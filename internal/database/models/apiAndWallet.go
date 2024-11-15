@@ -33,7 +33,7 @@ func EnsureIndexes(ctx context.Context, collection *mongo.Collection) error {
 
 // NewApiWalletUserCollection initializes the collection with indexes if needed
 func InitializeApiWalletuserCollection(db *mongo.Database) *mongo.Collection {
-	collection := db.Collection("apikey_and_balance")
+	collection := db.Collection("apikey_and_balances")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

@@ -5,6 +5,9 @@ go 1.23
 toolchain go1.23.3
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.3.4
+	github.com/fbsobreira/gotron-sdk v0.0.0-20230907131216-1e824406fe8c
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/joho/godotenv v1.5.1
@@ -16,14 +19,17 @@ require (
 )
 
 require (
-	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
-	github.com/golang/snappy v0.0.4 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
+	github.com/ethereum/go-ethereum v1.12.2 // indirect
+	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
-	github.com/klauspost/compress v1.13.6 // indirect
+	github.com/holiman/uint256 v1.2.3 // indirect
+	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
+	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect

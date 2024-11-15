@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,8 +11,14 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
+	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Allowed email domains
@@ -137,4 +146,184 @@ func storeOTP(email, otp string) error {
 	// Simulate storing OTP
 	fmt.Printf("Stored OTP %s for email %s\n", otp, email)
 	return nil
+}
+
+func GoogleSignup(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	type RequestBody struct {
+		Token string `json:"token"`
+	}
+
+	var body RequestBody
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+	}
+
+	// Fetch user data from Google
+	profile, err := fetchGoogleUserProfile(body.Token)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Failed to fetch user data"})
+	}
+
+	// Check if user exists
+	userCollection := models.InitializeUserCollection(db)
+	filter := bson.M{"email": profile["email"]}
+	var user models.User
+	err = userCollection.FindOne(context.TODO(), filter).Decode(&user)
+	if err != nil {
+		// Create a new user if not found
+		now := time.Now()
+		newUser := models.User{
+			ID:          primitive.NewObjectID(),
+			GoogleID:    profile["id"].(string),
+			DisplayName: profile["name"].(string),
+			Email:       profile["email"].(string),
+			ProfileImg:  profile["picture"].(string),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+
+		_, err = userCollection.InsertOne(context.TODO(), newUser)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create user"})
+		}
+
+		// Generate API key and wallet
+		apiKey := generateAPIKey()
+
+		// todo
+		trxAddress := "sample_trx_address"    // Replace with your implementation
+		trxPrivateKey := "sample_private_key" // Replace with your implementation
+
+		apiWallet := models.ApiWalletUser{
+			UserID:        newUser.ID,
+			APIKey:        apiKey,
+			Balance:       0,
+			TRXAddress:    trxAddress,
+			TRXPrivateKey: trxPrivateKey,
+		}
+
+		apiWalletColl := models.InitializeApiWalletuserCollection(db)
+		_, err = apiWalletColl.InsertOne(context.TODO(), apiWallet)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create wallet"})
+		}
+
+		// Generate JWT token
+		token := generateJWT(newUser.Email, newUser.ID.Hex(), "google", trxAddress)
+		return c.JSON(http.StatusOK, map[string]string{"token": token})
+	}
+
+	return c.JSON(http.StatusBadRequest, map[string]string{"error": "User already exists, Please Login."})
+}
+
+func GoogleLogin(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	type RequestBody struct {
+		Token string `json:"token"`
+	}
+
+	var body RequestBody
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+	}
+
+	// Fetch user data from Google
+	profile, err := fetchGoogleUserProfile(body.Token)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Failed to fetch user data"})
+	}
+
+	// Check if user exists
+	userCollection := models.InitializeUserCollection(db)
+	filter := bson.M{"email": profile["email"]}
+	var user models.User
+	err = userCollection.FindOne(context.TODO(), filter).Decode(&user)
+	if err != nil || user.GoogleID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "User not found, Please register."})
+	}
+
+	// Fetch wallet details
+	apiWalletColl := models.InitializeApiWalletuserCollection(db)
+	var apiWallet models.ApiWalletUser
+	err = apiWalletColl.FindOne(context.TODO(), bson.M{"userId": user.ID.Hex()}).Decode(&apiWallet)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch wallet details"})
+	}
+
+	// Generate JWT token
+	token := generateJWT(user.Email, user.ID.Hex(), "google", apiWallet.TRXAddress)
+	return c.JSON(http.StatusOK, map[string]string{"token": token})
+}
+
+// todo replace with env file
+// JWT Secret Key
+var jwtSecretKey = []byte("your_secret_key") // Replace with your secret key
+
+// Claims defines the structure of the JWT claims
+type Claims struct {
+	Email      string `json:"email"`
+	UserID     string `json:"userId"`
+	LoginType  string `json:"logintype"`
+	TRXAddress string `json:"trxAddress"`
+	jwt.StandardClaims
+}
+
+// Generate a JWT token
+func generateJWT(email, userID, loginType, trxAddress string) string {
+	claims := &Claims{
+		Email:      email,
+		UserID:     userID,
+		LoginType:  loginType,
+		TRXAddress: trxAddress,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(7 * 24 * time.Hour).Unix(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString(jwtSecretKey)
+	if err != nil {
+		fmt.Println("Error generating JWT:", err)
+		return ""
+	}
+	return signedToken
+}
+
+// Fetch Google user profile using access token
+func fetchGoogleUserProfile(token string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("https://www.googleapis.com/oauth2/v1/userinfo?access_token=%s", token)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to fetch profile, status code: %d", resp.StatusCode)
+	}
+
+	var profile map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&profile)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding profile response: %v", err)
+	}
+
+	return profile, nil
+}
+
+// Generate a random API key
+func generateAPIKey() string {
+	bytes := make([]byte, 16)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		fmt.Println("Error generating API key:", err)
+		return ""
+	}
+	return hex.EncodeToString(bytes)
 }

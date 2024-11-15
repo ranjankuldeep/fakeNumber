@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -54,6 +55,11 @@ func main() {
 	uri := "mongodb+srv://test2:amardeep885@cluster0.blfflhg.mongodb.net/Express-Backend?retryWrites=true&w=majority"
 	// use the echo logger
 	e.Use(middleware.Logger())
+	// Use CORS middleware to allow all origins
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+	}))
 
 	// Connect to the MongoDB client
 	client, err := database.ConnectDB(uri)
@@ -73,5 +79,5 @@ func main() {
 		}
 	})
 	routes.RegisterRoutes(e)
-	e.Logger.Fatal(e.Start(":8080"))
+	e.Logger.Fatal(e.Start(":8000"))
 }

@@ -19,13 +19,9 @@ type ServerDiscount struct {
 
 // InitializeServerDiscountCollection initializes the 'server-discount' collection and sets up indexes
 func InitializeServerDiscountCollection(db *mongo.Database) *mongo.Collection {
-	collection := db.Collection("server-discount")
+	collection := db.Collection("serverDiscount")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := EnsureIndexes(ctx, collection); err != nil {
-		// Handle error appropriately
-		// For example, log the error
-		// log.Println("Error ensuring indexes:", err)
-	}
+	_ = EnsureIndexes(ctx, collection)
 	return collection
 }

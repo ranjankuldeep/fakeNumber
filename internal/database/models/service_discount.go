@@ -19,5 +19,5 @@ type ServiceDiscount struct {
 
 // InitializeServiceDiscountCollection initializes and returns the collection for service discounts
 func InitializeServiceDiscountCollection(db *mongo.Database) *mongo.Collection {
-	return db.Collection("service-discount")
+	return db.Collection("serviceDiscount")
 }

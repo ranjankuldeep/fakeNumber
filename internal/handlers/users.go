@@ -347,18 +347,11 @@ type ForgotPasswordRequest struct {
 	Email string `json:"email"`
 }
 
-// OTP represents the structure of the OTP document
-type OTP struct {
-	Email string    `bson:"email"` // Email associated with the OTP
-	OTP   string    `bson:"otp"`   // The generated OTP
-	TTL   time.Time `bson:"ttl"`   // Time-to-live for the OTP
-}
-
 // ForgotPassword handles the forgot password functionality
 func ForgotPassword(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userCol := db.Collection("users")
-	otpCol := db.Collection("otp")
+	userCol := models.InitializeUserCollection(db)
+	otpCol := models.InitializeForgotOTPCollection(db)
 
 	var request ForgotPasswordRequest
 	if err := c.Bind(&request); err != nil {
@@ -396,10 +389,12 @@ func ForgotPassword(c echo.Context) error {
 	}
 
 	// Store OTP in the database
-	otpData := OTP{
-		Email: email,
-		OTP:   newOtp,
-		TTL:   time.Now().Add(15 * time.Minute), // OTP valid for 15 minutes
+	otpData := models.OTP{
+		ID:        primitive.NewObjectID(),
+		Email:     email,
+		OTP:       newOtp,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 	_, err = otpCol.InsertOne(ctx, otpData)
 	if err != nil {
@@ -971,7 +966,7 @@ func VerifyOTP(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	userCol := models.InitializeUserCollection(db)
 	otpCol := db.Collection("otp")
-	apiWalletCol := models.InitializeApiWalletuserCollection(db)
+	// apiWalletCol := models.InitializeApiWalletuserCollection(db)
 
 	type RequestBody struct {
 		Email    string `json:"email"`
@@ -1042,29 +1037,29 @@ func VerifyOTP(c echo.Context) error {
 	if _, err := rand.Read(apiKeyBytes); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate API key"})
 	}
-	apiKey := hex.EncodeToString(apiKeyBytes)
+	// apiKey := hex.EncodeToString(apiKeyBytes)
 
-	// Generate TRON wallet
-	wallet, err := lib.GenerateTronAddress()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate TRON wallet"})
-	}
-	trxAddress := wallet["address"]
-	trxPrivateKey := wallet["privateKey"]
+	// // Generate TRON wallet
+	// wallet, err := lib.GenerateTronAddress()
+	// if err != nil {
+	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate TRON wallet"})
+	// }
+	// trxAddress := wallet["address"]
+	// trxPrivateKey := wallet["privateKey"]
 
-	// Create API wallet user
-	apiWallet := models.ApiWalletUser{
-		UserID:        newUser.ID,
-		APIKey:        apiKey,
-		Balance:       0,
-		TRXAddress:    trxAddress,
-		TRXPrivateKey: trxPrivateKey,
-	}
+	// // Create API wallet user
+	// apiWallet := models.ApiWalletUser{
+	// 	UserID:        newUser.ID,
+	// 	APIKey:        apiKey,
+	// 	Balance:       0,
+	// 	TRXAddress:    trxAddress,
+	// 	TRXPrivateKey: trxPrivateKey,
+	// }
 
-	_, err = apiWalletCol.InsertOne(ctx, apiWallet)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create API wallet"})
-	}
+	// _, err = apiWalletCol.InsertOne(ctx, apiWallet)
+	// if err != nil {
+	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create API wallet"})
+	// }
 
 	return c.JSON(http.StatusOK, echo.Map{
 		"status":  "VERIFIED",

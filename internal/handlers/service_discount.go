@@ -13,7 +13,7 @@ import (
 )
 
 // addServiceDiscount handles adding or updating a service discount.
-func addServiceDiscount(c echo.Context) error {
+func AddServiceDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	// Define a struct to map the expected request body
 	type RequestBody struct {
@@ -69,7 +69,7 @@ func addServiceDiscount(c echo.Context) error {
 }
 
 // getServiceDiscount handles fetching all service discounts.
-func getServiceDiscount(c echo.Context) error {
+func GetServiceDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	// Define a struct to map the expected request body
 	type RequestBody struct {
@@ -104,7 +104,7 @@ func getServiceDiscount(c echo.Context) error {
 }
 
 // deleteServiceDiscount handles deleting a specific service discount.
-func deleteServiceDiscount(c echo.Context) error {
+func DeleteServiceDiscount(c echo.Context) error {
 	service := c.QueryParam("service")
 	server := c.QueryParam("server")
 
@@ -125,15 +125,4 @@ func deleteServiceDiscount(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Service discount deleted successfully."})
-}
-
-func main() {
-	e := echo.New()
-
-	e.POST("/service-discount", addServiceDiscount)
-	e.GET("/service-discount", getServiceDiscount)
-	e.DELETE("/service-discount", deleteServiceDiscount)
-
-	// Start the server
-	e.Logger.Fatal(e.Start(":8080"))
 }

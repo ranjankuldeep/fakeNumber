@@ -268,110 +268,104 @@ func GetServiceData(c echo.Context) error {
 	return c.JSON(http.StatusOK, filteredData)
 }
 
-// // GetUserServiceData handles user-specific service data fetching
-// func GetUserServiceData(c echo.Context) error {
-// 	userId := c.QueryParam("userId")
-// 	apiKey := c.QueryParam("api_key")
+// GetUserServiceData handles user-specific service data fetching
+func GetUserServiceData(c echo.Context) error {
+	userId := c.QueryParam("userId")
+	apiKey := c.QueryParam("api_key")
 
-// 	db := c.Get("db").(*mongo.Database)
-// 	serviceDiscountCollection := db.Collection("serviceDiscount")
-// 	serverDiscountCollection := db.Collection("serverDiscount")
-// 	userDiscountCollection := db.Collection("userDiscount")
+	db := c.Get("db").(*mongo.Database)
+	serviceDiscountCollection := db.Collection("serviceDiscount")
+	serverDiscountCollection := db.Collection("serverDiscount")
+	userDiscountCollection := db.Collection("userDiscount")
 
-// 	// Validate API key
-// 	var apiUser models.ApiWalletUser
-// 	apiCollection := db.Collection("apiWalletUser")
-// 	err := apiCollection.FindOne(context.Background(), bson.M{"api_key": apiKey}).Decode(&apiUser)
-// 	if err != nil {
-// 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "BAD REQUEST"})
-// 	}
+	// Validate API key
+	var apiUser models.ApiWalletUser
+	apiCollection := db.Collection("apiWalletUser")
+	err := apiCollection.FindOne(context.Background(), bson.M{"api_key": apiKey}).Decode(&apiUser)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "BAD REQUEST"})
+	}
 
-// 	// Check site maintenance status
-// 	var maintenanceStatus struct {
-// 		Maintenance bool `bson:"maintainance"`
-// 	}
-// 	serverCollection := db.Collection("server")
-// 	err = serverCollection.FindOne(context.Background(), bson.M{"server": 0}).Decode(&maintenanceStatus)
-// 	if err == nil && maintenanceStatus.Maintenance {
-// 		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
-// 	}
+	// Check site maintenance status
+	var maintenanceStatus struct {
+		Maintenance bool `bson:"maintainance"`
+	}
+	serverCollection := db.Collection("server")
+	err = serverCollection.FindOne(context.Background(), bson.M{"server": 0}).Decode(&maintenanceStatus)
+	if err == nil && maintenanceStatus.Maintenance {
+		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
+	}
 
-// 	// Fetch servers in maintenance
-// 	serversInMaintenance, err := serverCollection.Find(context.Background(), bson.M{"maintainance": true})
-// 	if err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-// 	}
-// 	defer serversInMaintenance.Close(context.Background())
+	// Fetch servers in maintenance
+	serversInMaintenance, err := serverCollection.Find(context.Background(), bson.M{"maintainance": true})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	defer serversInMaintenance.Close(context.Background())
 
-// 	// Extract server numbers in maintenance
-// 	var maintenanceServerNumbers []int
-// 	for serversInMaintenance.Next(context.Background()) {
-// 		var server struct {
-// 			Server int `bson:"server"`
-// 		}
-// 		if err := serversInMaintenance.Decode(&server); err == nil {
-// 			maintenanceServerNumbers = append(maintenanceServerNumbers, server.Server)
-// 		}
-// 	}
+	// Extract server numbers in maintenance
+	var maintenanceServerNumbers []int
+	for serversInMaintenance.Next(context.Background()) {
+		var server struct {
+			Server int `bson:"server"`
+		}
+		if err := serversInMaintenance.Decode(&server); err == nil {
+			maintenanceServerNumbers = append(maintenanceServerNumbers, server.Server)
+		}
+	}
 
-// 	// Fetch service data
-// 	serviceCollection := db.Collection("serverList")
-// 	cursor, err := serviceCollection.Find(context.Background(), bson.M{})
-// 	if err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-// 	}
-// 	defer cursor.Close(context.Background())
+	// Fetch service data
+	serviceCollection := db.Collection("serverList")
+	cursor, err := serviceCollection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	defer cursor.Close(context.Background())
 
-// 	var services []models.ServerList
-// 	for cursor.Next(context.Background()) {
-// 		var service models.ServerList
-// 		if err := cursor.Decode(&service); err == nil {
-// 			services = append(services, service)
-// 		}
-// 	}
+	var services []models.ServerList
+	for cursor.Next(context.Background()) {
+		var service models.ServerList
+		if err := cursor.Decode(&service); err == nil {
+			services = append(services, service)
+		}
+	}
 
-// // Load discounts
-// serviceDiscounts, serverDiscounts, userDiscounts, err := loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDiscountCollection, userId)
-// if err != nil {
-// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-// }
+	// Load discounts
+	serviceDiscounts, serverDiscounts, userDiscounts, err := loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDiscountCollection, userId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
 
-// 	// Process and filter data
-// 	filteredData := []ServiceResponse{}
-// 	for _, service := range services {
-// 		serverDetails := []ServerDetail{}
-// 		for _, server := range service.Servers {
-// 			if server.Block || contains(maintenanceServerNumbers, server.ServerNumber) {
-// 				continue
-// 			}
-// 			// Calculate discounts
-// 			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.ServiceCode, server.ServerNumber, userId)
-// 			price, _ := strconv.ParseFloat(server.Price, 64)
-// 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
+	// Process and filter data
+	filteredData := []ServiceResponse{}
+	for _, service := range services {
+		serverDetails := []ServerDetail{}
+		for _, server := range service.Servers {
+			if server.Block || contains(maintenanceServerNumbers, server.ServerNumber) {
+				continue
+			}
+			// Calculate discounts
+			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.ServiceCode, server.ServerNumber, userId)
+			price, _ := strconv.ParseFloat(server.Price, 64)
+			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
 
-// 			serverDetails = append(serverDetails, ServerDetail{
-// 				ServerNumber: server.ServerNumber,
-// 				Price:        adjustedPrice,
-// 			})
-// 		}
+			serverDetails = append(serverDetails, ServerDetail{
+				ServerNumber: server.ServerNumber,
+				Price:        adjustedPrice,
+			})
+		}
 
-// 		// Sort by server number and add to filtered data
-// 		sort.Slice(serverDetails, func(i, j int) bool {
-// 			return serverDetails[i].ServerNumber < serverDetails[j].ServerNumber
-// 		})
-// 		filteredData = append(filteredData, ServiceResponse{
-// 			ServiceCode: service.ServiceCode,
-// 			Servers:     serverDetails,
-// 		})
-// 	}
+		// Sort by server number and add to filtered data
+		sort.Slice(serverDetails, func(i, j int) bool {
+			return serverDetails[i].ServerNumber < serverDetails[j].ServerNumber
+		})
+		filteredData = append(filteredData, ServiceResponse{
+			Servers: serverDetails,
+		})
+	}
 
-// 	// Sort the data by service code
-// 	sort.Slice(filteredData, func(i, j int) bool {
-// 		return filteredData[i].ServiceCode < filteredData[j].ServiceCode
-// 	})
-
-// 	return c.JSON(http.StatusOK, filteredData)
-// }
+	return c.JSON(http.StatusOK, filteredData)
+}
 
 // Helper functions
 func contains(arr []int, num int) bool {
@@ -454,18 +448,18 @@ func TotalRecharge(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"totalAmount": strconv.FormatFloat(totalAmount, 'f', 2, 64)})
 }
 
-// // Handler to retrieve total user count
-// func GetTotalUserCount(c echo.Context) error {
-// 	db := c.Get("db").(*mongo.Database)
-// 	userCol := models.InitializeUserCollection(db)
+// Handler to retrieve total user count
+func GetTotalUserCount(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := models.InitializeUserCollection(db)
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-// 	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-// 	userCount, err := userCol.CountDocuments(ctx, bson.M{})
-// 	if err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error fetching user count"})
-// 	}
+	userCount, err := userCol.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error fetching user count"})
+	}
 
-// 	return c.JSON(http.StatusOK, echo.Map{"totalUserCount": userCount})
-// }
+	return c.JSON(http.StatusOK, echo.Map{"totalUserCount": userCount})
+}

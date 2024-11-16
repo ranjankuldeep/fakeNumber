@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func addServer(c echo.Context) error {
+func AddServer(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 
@@ -50,7 +50,7 @@ func addServer(c echo.Context) error {
 }
 
 // Get all servers
-func getServer(c echo.Context) error {
+func GetServer(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 
@@ -67,7 +67,7 @@ func getServer(c echo.Context) error {
 }
 
 // Get maintenance status for server 0
-func getServerZero(c echo.Context) error {
+func GetServerZero(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 	var server models.Server
@@ -79,7 +79,7 @@ func getServerZero(c echo.Context) error {
 }
 
 // Delete a server
-func deleteServer(c echo.Context) error {
+func DeleteServer(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 
@@ -100,7 +100,7 @@ func deleteServer(c echo.Context) error {
 }
 
 // Update maintenance status for a server
-func maintainanceServer(c echo.Context) error {
+func MaintainanceServer(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 
@@ -123,7 +123,7 @@ func maintainanceServer(c echo.Context) error {
 }
 
 // Add token for server 9
-func addTokenForServer9(c echo.Context) error {
+func AddTokenForServer9(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 
@@ -143,7 +143,7 @@ func addTokenForServer9(c echo.Context) error {
 }
 
 // Get token for server 9
-func getTokenForServer9(c echo.Context) error {
+func GetTokenForServer9(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 
@@ -156,7 +156,7 @@ func getTokenForServer9(c echo.Context) error {
 }
 
 // Update exchange rate and margin for a server
-func updateExchangeRateAndMargin(c echo.Context) error {
+func UpdateExchangeRateAndMargin(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := db.Collection("server")
 

@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func addDiscount(c echo.Context) error {
+func AddDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	server, err := strconv.Atoi(c.FormValue("server"))
 	if err != nil {
@@ -40,7 +40,7 @@ func addDiscount(c echo.Context) error {
 }
 
 // Handler to get all server discounts
-func getDiscount(c echo.Context) error {
+func GetDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	var serverDiscounts []models.ServerDiscount
 	cursor, err := db.Collection("server_discount").Find(context.Background(), bson.M{})
@@ -59,7 +59,7 @@ func getDiscount(c echo.Context) error {
 }
 
 // Handler to delete a server discount
-func deleteDiscount(c echo.Context) error {
+func DeleteDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverStr := c.QueryParam("server")
 	if serverStr == "" {

@@ -25,5 +25,5 @@ func RegisterUserRoutes(e *echo.Echo) {
 	e.POST("/api/user", handlers.BlockUnblockUser)
 	e.GET("/api/blocked-user", handlers.BlockedUser)
 	e.GET("/api/get-all-blocked-users", handlers.GetAllBlockedUsers)
-	e.GET("/api/orders", handlers.GetOrdersByUserID)
+	e.GET("/api/orders", handlers.GetOrdersByUserId)
 }

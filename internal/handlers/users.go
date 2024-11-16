@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+
 	"net/http"
 	"os"
 	"strings"
@@ -21,6 +22,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Allowed email domains
@@ -337,4 +340,734 @@ func generateAPIKey() string {
 		return ""
 	}
 	return hex.EncodeToString(bytes)
+}
+
+// ForgotPasswordRequest represents the request body for forgot password
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// OTP represents the structure of the OTP document
+type OTP struct {
+	Email string    `bson:"email"` // Email associated with the OTP
+	OTP   string    `bson:"otp"`   // The generated OTP
+	TTL   time.Time `bson:"ttl"`   // Time-to-live for the OTP
+}
+
+// ForgotPassword handles the forgot password functionality
+func ForgotPassword(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+	otpCol := db.Collection("otp")
+
+	var request ForgotPasswordRequest
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
+	}
+
+	email := request.Email
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Email is required"})
+	}
+
+	// Check if the user exists
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user bson.M
+	err := userCol.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusBadRequest, echo.Map{
+			"error": "User does not exist. Please sign up for an account.",
+		})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	// Generate a new OTP
+	newOtp := generateOTP()
+	otpText := "Your OTP for Changing Password is"
+	subText := "Forgot Password OTP verification"
+
+	// Send OTP via email
+	sendOtpResult := sendOTPByEmail(email, newOtp, otpText, subText)
+	if sendOtpResult != nil { // Check if there was an error
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to send OTP"})
+	}
+
+	// Store OTP in the database
+	otpData := OTP{
+		Email: email,
+		OTP:   newOtp,
+		TTL:   time.Now().Add(15 * time.Minute), // OTP valid for 15 minutes
+	}
+	_, err = otpCol.InsertOne(ctx, otpData)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to store OTP"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"status":  "PENDING",
+		"message": "Forgot Password OTP sent successfully.",
+		"email":   email,
+	})
+}
+
+func GenerateSecureOTP() string {
+	bytes := make([]byte, 3) // 3 bytes for a 6-digit number
+	_, err := rand.Read(bytes)
+	if err != nil {
+		fmt.Println("Error generating secure OTP:", err)
+		return ""
+	}
+	otp := int(bytes[0])<<16 + int(bytes[1])<<8 + int(bytes[2])
+	return fmt.Sprintf("%06d", otp%1000000)
+}
+
+// ResendForgotOTPRequest represents the request body for resending OTP
+type ResendForgotOTPRequest struct {
+	Email string `json:"email"`
+}
+
+// ResendForgotOTP handles the logic for resending the OTP
+func ResendForgotOTP(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+	otpCol := db.Collection("otp")
+
+	var request ResendForgotOTPRequest
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
+	}
+
+	email := request.Email
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Email is required"})
+	}
+
+	// Check if the user exists
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user bson.M
+	err := userCol.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "User does not exist"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	// Generate a new OTP
+	newOtp := GenerateSecureOTP() // Ensure you have a GenerateOTP function
+	otpText := "Your new OTP for Changing Password is"
+	subText := "Forgot Password OTP verification"
+
+	// Send the new OTP via email
+	if err := sendOTPByEmail(email, newOtp, otpText, subText); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to send OTP"})
+	}
+
+	// Update the OTP in the database
+	filter := bson.M{"email": email}
+	update := bson.M{
+		"$set": bson.M{
+			"otp": newOtp,
+			"ttl": time.Now().Add(15 * time.Minute), // Update TTL for new OTP
+		},
+	}
+
+	_, err = otpCol.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update OTP in database"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"status":  "PENDING",
+		"message": "New OTP sent successfully.",
+		"email":   email,
+	})
+}
+
+// ForgotVerifyOTPRequest represents the request body for verifying an OTP
+type ForgotVerifyOTPRequest struct {
+	Email string `json:"email"`
+	OTP   string `json:"otp"`
+}
+
+// ForgotVerifyOTP handles the OTP verification process
+func ForgotVerifyOTP(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	otpCol := db.Collection("otp") // Ensure this collection corresponds to where OTPs are stored
+
+	var request ForgotVerifyOTPRequest
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
+	}
+
+	email := request.Email
+	otp := request.OTP
+
+	if email == "" || otp == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Email and OTP are required"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Find the OTP document for the provided email
+	var otpDoc bson.M
+	err := otpCol.FindOne(ctx, bson.M{"email": email}).Decode(&otpDoc)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "No OTP sent"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	// Retrieve the stored hashed OTP from the document
+	storedHashedOTP, ok := otpDoc["otp"].(string)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid OTP data format"})
+	}
+
+	// Compare the provided OTP with the stored hashed OTP
+	err = bcrypt.CompareHashAndPassword([]byte(storedHashedOTP), []byte(otp))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid OTP"})
+	}
+
+	// OTP verified successfully
+	return c.JSON(http.StatusOK, echo.Map{
+		"status":  "VERIFIED",
+		"message": "OTP verified successfully!",
+	})
+}
+
+// ChangePasswordUnauthenticatedRequest represents the request body for changing a password
+type ChangePasswordUnauthenticatedRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// ChangePasswordUnauthenticated handles changing the password without authentication
+func ChangePasswordUnauthenticated(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+	otpCol := db.Collection("otp")
+
+	var request ChangePasswordUnauthenticatedRequest
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
+	}
+
+	email := request.Email
+	password := request.Password
+
+	if email == "" || password == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Email and password are required"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Find the OTP document for the provided email
+	var otpDoc bson.M
+	err := otpCol.FindOne(ctx, bson.M{"email": email}).Decode(&otpDoc)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "OTP not verified"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	// Delete the OTP document
+	_, err = otpCol.DeleteOne(ctx, bson.M{"email": email})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to delete OTP document"})
+	}
+
+	// Hash the new password
+	newHashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to hash password"})
+	}
+
+	// Update the user document with the new password
+	update := bson.M{"$set": bson.M{"password": string(newHashedPassword)}}
+	_, err = userCol.UpdateOne(ctx, bson.M{"email": email}, update)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update password"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"status":  "SUCCESS",
+		"message": "Password changed successfully!",
+	})
+}
+
+// ChangePasswordAuthenticatedRequest represents the request body for changing the password
+type ChangePasswordAuthenticatedRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+	UserID          string `json:"userId"`
+	Captcha         string `json:"captcha"`
+}
+
+// ChangePasswordAuthenticated handles password change for authenticated users
+func ChangePasswordAuthenticated(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+
+	var request ChangePasswordAuthenticatedRequest
+	if err := c.Bind(&request); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
+	}
+
+	if request.Captcha == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Please complete the CAPTCHA"})
+	}
+
+	// Verify CAPTCHA
+	if err := verifyCaptcha(request.Captcha); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Find the user by UserID
+	var user bson.M
+	err := userCol.FindOne(ctx, bson.M{"_id": request.UserID}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	// Compare the provided current password with the stored hashed password
+	currentPassword := user["password"].(string)
+	err = bcrypt.CompareHashAndPassword([]byte(currentPassword), []byte(request.CurrentPassword))
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "Current password is incorrect"})
+	}
+
+	// Hash the new password
+	newHashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to hash password"})
+	}
+
+	// Update the user's password
+	filter := bson.M{"_id": request.UserID}
+	update := bson.M{"$set": bson.M{"password": string(newHashedPassword)}}
+	_, err = userCol.UpdateOne(ctx, filter, update, options.Update().SetUpsert(false))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update password"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"status":  "SUCCESS",
+		"message": "Password changed successfully!",
+	})
+}
+
+// User represents the user structure
+// User represents the structure of user data
+type User struct {
+	ID        string  `bson:"_id" json:"id"`
+	Email     string  `bson:"email" json:"email"`
+	Username  string  `bson:"username" json:"username"`
+	CreatedAt string  `bson:"created_at" json:"created_at"`
+	UpdatedAt string  `bson:"updated_at" json:"updated_at"`
+	Balance   float64 `json:"balance"` // Ensure balance is of type float64
+}
+
+// GetUserBalance retrieves the balance of a user by their userId
+func GetUserBalance(userID string, walletCol *mongo.Collection) (float64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Structure to hold the wallet data
+	var wallet struct {
+		Balance float64 `bson:"balance"`
+	}
+
+	// Find the wallet document by userId
+	err := walletCol.FindOne(ctx, bson.M{"userId": userID}).Decode(&wallet)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return 0, nil // Return 0 if user is not found
+		}
+		return 0, err // Return the error for other cases
+	}
+
+	return wallet.Balance, nil
+}
+
+// GetAllUsers retrieves all users and includes their balances
+func GetAllUsers(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+	walletCol := db.Collection("wallets")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Define the filter to fetch all users
+	filter := bson.M{}
+	projection := bson.M{"password": 0} // Exclude the password field
+
+	// Set the find options to include the projection
+	findOptions := options.Find().SetProjection(projection)
+
+	cursor, err := userCol.Find(ctx, filter, findOptions)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch user data"})
+	}
+	defer cursor.Close(ctx)
+
+	var users []bson.M
+	if err := cursor.All(ctx, &users); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to parse user data"})
+	}
+
+	// Fetch balance for each user
+	for i, user := range users {
+		userID, ok := user["_id"].(primitive.ObjectID)
+		if !ok {
+			continue
+		}
+
+		var wallet bson.M
+		if err := walletCol.FindOne(ctx, bson.M{"userId": userID}).Decode(&wallet); err == nil {
+			if balance, ok := wallet["balance"].(float64); ok {
+				users[i]["balance"] = balance
+			} else {
+				users[i]["balance"] = 0.0
+			}
+		} else {
+			users[i]["balance"] = 0.0
+		}
+	}
+
+	if len(users) == 0 {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "No user data"})
+	}
+
+	return c.JSON(http.StatusOK, users)
+}
+
+// GetUser fetches user details along with API wallet data
+func GetUser(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+	walletCol := db.Collection("wallets")
+
+	// Retrieve userId from query parameters
+	userId := c.QueryParam("userId")
+	if userId == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "userId is required"})
+	}
+
+	// Convert userId to ObjectID
+	objID, err := primitive.ObjectIDFromHex(userId)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Fetch user data excluding the password field
+	var user bson.M
+	projection := bson.M{"password": 0}
+	err = userCol.FindOne(ctx, bson.M{"_id": objID}, options.FindOne().SetProjection(projection)).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch user data"})
+	}
+
+	// Fetch user's API wallet data
+	var wallet bson.M
+	err = walletCol.FindOne(ctx, bson.M{"userId": objID}).Decode(&wallet)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "API wallet not found"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch API wallet data"})
+	}
+
+	// Combine user data with wallet data
+	userDataWithWallet := user
+	if balance, ok := wallet["balance"]; ok {
+		userDataWithWallet["balance"] = balance
+	} else {
+		userDataWithWallet["balance"] = 0.0
+	}
+
+	if apiKey, ok := wallet["api_key"]; ok {
+		userDataWithWallet["api_key"] = apiKey
+	}
+
+	if trxAddress, ok := wallet["trxAddress"]; ok {
+		userDataWithWallet["trxAddress"] = trxAddress
+	}
+
+	if trxPrivateKey, ok := wallet["trxPrivateKey"]; ok {
+		userDataWithWallet["trxPrivateKey"] = trxPrivateKey
+	}
+
+	return c.JSON(http.StatusOK, userDataWithWallet)
+}
+
+// BlockUnblockUser handles blocking or unblocking a user
+func BlockUnblockUser(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+
+	// Define the request body structure
+	type RequestBody struct {
+		Blocked bool   `json:"blocked"`
+		UserID  string `json:"userId"`
+	}
+
+	var body RequestBody
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
+	}
+
+	// Validate userId
+	objID, err := primitive.ObjectIDFromHex(body.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Check if the user exists
+	var user bson.M
+	err = userCol.FindOne(ctx, bson.M{"_id": objID}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+
+	// Update the blocked status
+	_, err = userCol.UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": bson.M{"blocked": body.Blocked}})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update user status"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"status":  "SUCCESS",
+		"message": "User saved successfully",
+	})
+}
+
+// BlockedUser checks if a user is blocked
+func BlockedUser(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+
+	// Get userId from query parameters
+	userId := c.QueryParam("userId")
+	if userId == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "userId is required"})
+	}
+
+	// Validate the userId format
+	objID, err := primitive.ObjectIDFromHex(userId)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Find the user by ID
+	var user bson.M
+	err = userCol.FindOne(ctx, bson.M{"_id": objID}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+
+	// Check if the user is blocked
+	blocked, ok := user["blocked"].(bool)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Unable to determine blocked status"})
+	}
+
+	// Return appropriate response based on blocked status
+	if blocked {
+		return c.JSON(http.StatusOK, echo.Map{"message": "User is blocked"})
+	} else {
+		return c.JSON(http.StatusOK, echo.Map{"message": "User is not blocked"})
+	}
+}
+
+// GetAllBlockedUsers retrieves all blocked users
+func GetAllBlockedUsers(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Query for all users with "blocked" set to true
+	cursor, err := userCol.Find(ctx, bson.M{"blocked": true})
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusNotFound, echo.Map{"error": "No blocked users found"})
+		}
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	defer cursor.Close(ctx)
+
+	// Parse the results into a slice of documents
+	var blockedUsers []bson.M
+	if err := cursor.All(ctx, &blockedUsers); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to parse blocked users"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"data": blockedUsers})
+}
+
+// GetOrdersByUserId retrieves orders by a specific user ID
+func GetOrdersByUserId(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	orderCol := db.Collection("orders")
+
+	userId := c.QueryParam("userId")
+	if userId == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "userId is required"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Query to find orders for the userId and sort them by orderTime in descending order
+	filter := bson.M{"userId": userId}
+	opts := options.Find().SetSort(bson.D{{Key: "orderTime", Value: -1}})
+
+	cursor, err := orderCol.Find(ctx, filter, opts)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error fetching orders", "error": err.Error()})
+	}
+	defer cursor.Close(ctx)
+
+	// Decode the cursor into a slice of orders
+	var orders []bson.M
+	if err := cursor.All(ctx, &orders); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error decoding orders", "error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, orders)
+}
+
+// VerifyOTP verifies the OTP and registers the user
+func VerifyOTP(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	userCol := models.InitializeUserCollection(db)
+	otpCol := db.Collection("otp")
+	apiWalletCol := models.InitializeApiWalletuserCollection(db)
+
+	type RequestBody struct {
+		Email    string `json:"email"`
+		OTP      string `json:"otp"`
+		Password string `json:"password"`
+	}
+
+	var body RequestBody
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Check if the email already exists
+	var existingUser models.User
+	err := userCol.FindOne(ctx, bson.M{"email": body.Email}).Decode(&existingUser)
+	if err == nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Email already exists"})
+	} else if err != mongo.ErrNoDocuments {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	// Find the OTP document
+	var otpDoc bson.M
+	err = otpCol.FindOne(ctx, bson.M{"email": body.Email}).Decode(&otpDoc)
+	if err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "OTP not found or expired"})
+	} else if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	// Validate the OTP
+	hashedOTP := otpDoc["otp"].(string)
+	if err := bcrypt.CompareHashAndPassword([]byte(hashedOTP), []byte(body.OTP)); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid OTP"})
+	}
+
+	// Delete the OTP document
+	_, err = otpCol.DeleteOne(ctx, bson.M{"email": body.Email})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to delete OTP"})
+	}
+
+	// Hash the password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to hash password"})
+	}
+
+	// Create a new user
+	newUser := models.User{
+		ID:        primitive.NewObjectID(),
+		Email:     body.Email,
+		Password:  string(hashedPassword),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	_, err = userCol.InsertOne(ctx, newUser)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to register user"})
+	}
+
+	// Generate API key
+	apiKeyBytes := make([]byte, 16)
+	if _, err := rand.Read(apiKeyBytes); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate API key"})
+	}
+	apiKey := hex.EncodeToString(apiKeyBytes)
+
+	// Generate TRON wallet
+	wallet, err := lib.GenerateTronAddress()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate TRON wallet"})
+	}
+	trxAddress := wallet["address"]
+	trxPrivateKey := wallet["privateKey"]
+
+	// Create API wallet user
+	apiWallet := models.ApiWalletUser{
+		UserID:        newUser.ID,
+		APIKey:        apiKey,
+		Balance:       0,
+		TRXAddress:    trxAddress,
+		TRXPrivateKey: trxPrivateKey,
+	}
+
+	_, err = apiWalletCol.InsertOne(ctx, apiWallet)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create API wallet"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"status":  "VERIFIED",
+		"message": "User registered successfully",
+	})
 }

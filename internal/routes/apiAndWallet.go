@@ -11,11 +11,11 @@ func RegisterApiWalletRoutes(e *echo.Echo) {
 
 	// Define routes
 	apiWalletGroup.GET("api_key", handlers.ApiKey)
-	apiWalletGroup.GET("balance", handlers.Balance)
-	apiWalletGroup.GET("change_api_key", handlers.ChangeApiKey)
-	apiWalletGroup.POST("edit-balance", handlers.UpdateBalance)
-	apiWalletGroup.POST("update-qr", handlers.UpiQRUpdate)
+	apiWalletGroup.GET("balance", handlers.BalanceHandler)
+	apiWalletGroup.GET("change_api_key", handlers.ChangeAPIKeyHandler)
+	apiWalletGroup.POST("edit-balance", handlers.UpdateBalanceHandler)
+	apiWalletGroup.POST("update-qr", handlers.UpiQRUpdateHandler)
 	apiWalletGroup.GET("get-qr", handlers.GetUpiQR)
-	apiWalletGroup.POST("add-recharge-api", handlers.CreateOrUpdateApiKey)
-	apiWalletGroup.GET("get-recharge-api", handlers.GetApiKey)
+	apiWalletGroup.POST("add-recharge-api", handlers.CreateOrUpdateAPIKeyHandler)
+	apiWalletGroup.GET("get-recharge-api", handlers.GetAPIKeyHandler)
 }

@@ -42,26 +42,29 @@ var numData NumberData
 func HandleGetNumberRequest(c echo.Context) error {
 	ctx := context.TODO()
 	db := c.Get("db").(*mongo.Database)
+	logs.Logger.Info("reached")
 
 	// Get query parameters
-	serviceCode := c.QueryParam("code")
+	serverDataCode := c.QueryParam("code")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
-	serviceName := strings.ReplaceAll(serviceCode, "%", " ")
+	temp := c.QueryParam("serverName")
+	logs.Logger.Infof("%s %s %s %s", serverDataCode, apiKey, server, temp)
 
+	serviceName := strings.ReplaceAll(temp, "%", " ")
 	serverNumber, _ := strconv.Atoi(server)
 
-	if serviceCode == "" || apiKey == "" || server == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Service code, API key, and Server are required."})
+	if serviceName == "" || apiKey == "" || server == "" || serverDataCode == "" {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Service code, API key, and Server are required."})
 	}
 
 	// Fetch service details
 	serverListCollection := models.InitializeServerListCollection(db)
-	var serverCode models.ServerList
-	err := serverListCollection.FindOne(ctx, bson.M{"service_code": serviceCode}).Decode(&serverCode)
-	if err != nil {
+	var service models.ServerList
+	err := serverListCollection.FindOne(ctx, bson.M{"name": serviceName}).Decode(&service)
+	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "Service not found."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Service not found."})
 	}
 
 	// Fetch apiWalletUser details for calculating balance
@@ -69,7 +72,8 @@ func HandleGetNumberRequest(c echo.Context) error {
 	var apiWalletUser models.ApiWalletUser
 	err = apiWalletUserCollection.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid API key."})
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid API key."})
 	}
 
 	// Fetch user details and return if user is blocked
@@ -78,35 +82,36 @@ func HandleGetNumberRequest(c echo.Context) error {
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
 	// Check if the user is blocked
 	if user.Blocked {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Your account is blocked, contact the Admin."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Your account is blocked, contact the Admin."})
 	}
 
 	//// Fetch server maintenance data
 	// TODO: ALSO HADNLE THE MAITAINENCE
 	serverCollection := models.InitializeServerCollection(db)
 	var serverInfo models.Server
-	err = serverCollection.FindOne(ctx, bson.M{"server": server}).Decode(&serverInfo)
+	err = serverCollection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverInfo)
 	if err != nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "Server not found."})
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Server not found."})
 	}
-	server_api_key := serverInfo.APIKey
+	server_api_key := serverInfo.Token
 
 	// Find the server list for the specified server name and server number
 	serverListollection := models.InitializeServerListCollection(db)
 	var serverList models.ServerList
 	err = serverListollection.FindOne(ctx, bson.M{
 		"name":           serviceName,
-		"servers.server": server,
+		"servers.server": serverNumber,
 	}).Decode(&serverList)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't find serverlist"})
 	}
 
 	// Find the specific server data
-	var serviceData models.ServerData
+	var serverData models.ServerData
 	for _, s := range serverList.Servers {
 		if s.Server == serverNumber {
-			serviceData = models.ServerData{
+			serverData = models.ServerData{
 				Price:  s.Price,
 				Code:   s.Code,
 				Otp:    s.Otp,
@@ -116,7 +121,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 
 	// fetch id and numbers
-	apiURLRequest, err := constructApiUrl(server, server_api_key, serviceData)
+	apiURLRequest, err := constructApiUrl(server, server_api_key, serverData)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't construcrt api url"})
@@ -207,14 +212,16 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with different url
 		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
 		if err != nil {
+			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
+		logs.Logger.Info(fmt.Sprintf("id-%s number-%s", id, number))
 		numData.Id = id
 		numData.Number = number
 	}
 
 	// update the price with the discount
-	price, _ := strconv.ParseFloat(serviceData.Price, 64)
+	price, _ := strconv.ParseFloat(serverData.Price, 64)
 	discount, err := FetchDiscount(ctx, db, user.ID.Hex(), serviceName, serverNumber)
 	price += discount
 
@@ -400,6 +407,22 @@ func constructApiUrl(server, apiKeyServer string, data models.ServerData) (ApiRe
 			URL: fmt.Sprintf(
 				"http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=%s&quantity=1&country=IN&effectiveTime=10",
 				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
+	case "10":
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=%s&quantity=1&country=IN&effectiveTime=10",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
+	case "11":
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=false",
+				apiKeyServer,
 			),
 			Headers: map[string]string{}, // Empty headers
 		}, nil

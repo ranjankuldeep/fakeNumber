@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 // APIResponse structure to match the valid response format
@@ -21,40 +24,28 @@ type APIResponseServer11 struct {
 
 // FetchNumber fetches the number and ID from the given API
 func ExtractNumberServer11(url string) (string, string, error) {
-	// Make HTTP GET request
 	resp, err := http.Get(url)
 	if err != nil {
+		logs.Logger.Error(err)
 		return "", "", err
 	}
 	defer resp.Body.Close()
 
-	// Read the response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		logs.Logger.Error(err)
 		return "", "", err
 	}
 
-	// Parse the JSON response
 	var apiResponse APIResponseServer11
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		logs.Logger.Error(err)
 		return "", "", err
 	}
 
-	// Handle errors based on error_code or success flag
-	if apiResponse.ErrorCode != "" {
-		return "", "", errors.New(apiResponse.ErrorCode)
-	}
-
-	// Check for invalid API key scenario
-	if !apiResponse.Success && apiResponse.ErrorCode == "wrong_token" {
-		return "", "", errors.New(apiResponse.ErrorCode)
-	}
-
-	// Extract and return ID and Number for valid responses
+	phone := strings.TrimPrefix(apiResponse.Number, "91")
 	if apiResponse.RequestID != 0 && apiResponse.Number != "" {
-		return fmt.Sprintf("%d", apiResponse.RequestID), apiResponse.Number, nil
+		return phone, fmt.Sprintf("%d", apiResponse.RequestID), nil
 	}
-
-	// Handle unexpected response formats
-	return "", "", errors.New("unknown error or invalid response")
+	return "", "", errors.New(apiResponse.ErrorCode)
 }

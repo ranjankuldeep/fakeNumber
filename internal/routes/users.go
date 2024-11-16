@@ -7,7 +7,7 @@ import (
 
 // RegisterRoutes sets up the routes for the application
 func RegisterUserRoutes(e *echo.Echo) {
-	e.POST("/api/signup", handlers.Signup)
+	e.POST("/api/signup", handlers.SignUp)
 	e.POST("/api/verify-otp", handlers.VerifyOTP)
 	// e.POST("/api/resend-otp", handlers.ResendOTP)
 	// e.POST("/api/login", handlers.Login)

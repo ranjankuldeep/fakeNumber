@@ -75,7 +75,7 @@ func generateOTP() string {
 }
 
 // Handler function for signup
-func signup(c echo.Context) error {
+func SignUp(c echo.Context) error {
 	var req SignupRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})

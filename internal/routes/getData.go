@@ -7,7 +7,7 @@ import (
 
 // RegisterGetDataRoutes sets up routes for data retrieval operations.
 func RegisterGetDataRoutes(e *echo.Echo) {
-	dataGroup := e.Group("/api")
+	dataGroup := e.Group("/api/")
 
 	// Define routes
 	dataGroup.GET("get-service-data", handlers.GetServiceData)

@@ -341,23 +341,23 @@ func GetUserServiceData(c echo.Context) error {
 	for _, service := range services {
 		serverDetails := []ServerDetail{}
 		for _, server := range service.Servers {
-			if server.Block || contains(maintenanceServerNumbers, server.ServerNumber) {
+			if contains(maintenanceServerNumbers, server.Server) {
 				continue
 			}
 			// Calculate discounts
-			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.ServiceCode, server.ServerNumber, userId)
+			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.Name, server.Server, userId)
 			price, _ := strconv.ParseFloat(server.Price, 64)
 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
 
 			serverDetails = append(serverDetails, ServerDetail{
-				ServerNumber: server.ServerNumber,
-				Price:        adjustedPrice,
+				Server: strconv.Itoa(server.Server),
+				Price:  adjustedPrice,
 			})
 		}
 
 		// Sort by server number and add to filtered data
 		sort.Slice(serverDetails, func(i, j int) bool {
-			return serverDetails[i].ServerNumber < serverDetails[j].ServerNumber
+			return serverDetails[i].Server < serverDetails[j].Server
 		})
 		filteredData = append(filteredData, ServiceResponse{
 			Servers: serverDetails,

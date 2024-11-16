@@ -1,34 +1,26 @@
 package lib
 
-import (
-	"crypto/ecdsa"
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
+// func GenerateTronAddress(tronName, tronPasswd string)(map[string]string, error){
+// 	address := map[string]string{}
 
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/fbsobreira/gotron-sdk/pkg/address"
-)
+// 	// Create a new TRON key using the KeyManager
+// 	walletManager := tron.NewWalletManager()
+// 	wallet, _, err := walletManager.CreateNewWallet(tronName, tronPasswd)
+// 	if err != nil {
+// 		logs.Logger.Error("tron wallet is not created")
+// 		return map[string]string{}, err
+// 	}
 
-// GenerateTronAddress generates a new TRON address and private key
-func GenerateTronAddress() (map[string]string, error) {
-	// Generate a new private key using the secp256k1 curve
-	privateKey, err := ecdsa.GenerateKey(btcec.S256(), rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("error generating private key: %v", err)
-	}
+// 	addr := walletManager.GenerateAddress()
 
-	// Convert the private key to a hexadecimal string
-	privateKeyBytes := privateKey.D.Bytes()
-	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+// 	key, err := keyManager.NewKey()
+// 	if err != nil {
+// 		return "", "", fmt.Errorf("failed to generate key: %v", err)
+// 	}
 
-	// Derive the TRON address from the public key
-	publicKey := privateKey.PublicKey
-	tronAddress := address.PubkeyToAddress(publicKey)
+// 	// Extract private key and address
+// 	privateKey := key.Private
+// 	address := key.Address
 
-	// Return the private key and TRON address
-	return map[string]string{
-		"privateKey": privateKeyHex,
-		"address":    tronAddress.String(),
-	}, nil
-}
+// 	return address, privateKey, nil
+// }

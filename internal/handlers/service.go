@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
+	serverscalc "github.com/ranjankuldeep/fakeNumber/internal/serversCalc"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -31,15 +32,23 @@ type ResponseData struct {
 	ID     string
 	Number string
 }
+type NumberData struct {
+	Id     string
+	Number string
+}
+
+var numData NumberData
 
 func HandleGetNumberRequest(c echo.Context) error {
 	ctx := context.TODO()
 	db := c.Get("db").(*mongo.Database)
 
 	// Get query parameters
-	serviceCode := c.QueryParam("servicecode")
+	serviceCode := c.QueryParam("code")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
+	serviceName := strings.ReplaceAll(serviceCode, "%", " ")
+
 	serverNumber, _ := strconv.Atoi(server)
 
 	if serviceCode == "" || apiKey == "" || server == "" {
@@ -54,7 +63,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "Service not found."})
 	}
-	serviceName := serverCode.Name
 
 	// Fetch apiWalletUser details for calculating balance
 	apiWalletUserCollection := models.InitializeApiWalletuserCollection(db)
@@ -83,9 +91,8 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 	server_api_key := serverInfo.APIKey
 
-	serverListollection := models.InitializeServerListCollection(db)
-
 	// Find the server list for the specified server name and server number
+	serverListollection := models.InitializeServerListCollection(db)
 	var serverList models.ServerList
 	err = serverListollection.FindOne(ctx, bson.M{
 		"name":           serviceName,
@@ -109,33 +116,101 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 
 	// fetch id and numbers
-	apiURL, err := constructApiUrl(server, server_api_key, serviceData)
+	apiURLRequest, err := constructApiUrl(server, server_api_key, serviceData)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't construcrt api url"})
 	}
-	var number string
-	var id string
-
-	switch apiURL.(type) {
-	case string:
-		responseData, err := fetchNumber(server, apiURL.(string), map[string]string{})
+	// handler all the server case and extract id and number
+	switch server {
+	case "1":
+		// Multiple OTP server with same url
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't find serverlist"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
-		number = responseData.Number
-		id = responseData.ID
-
-	case ApiRequest:
-		responseData, err := fetchNumber(server, apiURL.(ApiRequest).URL, apiURL.(ApiRequest).Headers)
+		numData.Id = id
+		numData.Number = number
+	case "2":
+		// Multiple OTP server with same url
+		number, id, err := serverscalc.ExtractNumberServer2(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't find serverlist"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
-
-		number = responseData.Number
-		id = responseData.ID
+		numData.Id = id
+		numData.Number = number
+	case "3":
+		// Multiple OTP server with same url
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "4":
+		// Single OTP server
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "5":
+		// Multiple OTP server with same url
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "6":
+		// Single OTP server
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "7":
+		// Multiple OTP server with same url
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "8":
+		// Multiple OTP server with same url
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "9":
+		// Single OTP server
+		number, id, err := serverscalc.ExtractNumberServer9(apiURLRequest.URL)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "10":
+		// Single OTP server
+		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
+	case "11":
+		// Multiple OTP server with different url
+		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+		}
+		numData.Id = id
+		numData.Number = number
 	}
 
 	// update the price with the discount
@@ -163,7 +238,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		Price:    fmt.Sprintf("%.2f", price),
 		Server:   server,
 		ID:       primitive.NewObjectID(),
-		Number:   number,
+		Number:   numData.Number,
 		Status:   "FINISHED",
 		DateTime: time.Now().Format("2006-01-02T15:04:05"),
 	}
@@ -180,8 +255,8 @@ func HandleGetNumberRequest(c echo.Context) error {
 		Service:        serviceName,
 		Price:          price,
 		Server:         serverNumber,
-		NumberID:       id,
-		Number:         number,
+		NumberID:       numData.Id,
+		Number:         numData.Id,
 		OrderTime:      time.Now(),
 		ExpirationTime: time.Now().Add(20 * time.Minute),
 	}
@@ -189,7 +264,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save order."})
 	}
-	return c.JSON(http.StatusOK, map[string]string{"number": number, "id": id})
+	return c.JSON(http.StatusOK, map[string]string{"number": numData.Number, "id": numData.Id})
 }
 
 // Helper Functions
@@ -242,14 +317,17 @@ func round(val float64, precision int) float64 {
 }
 
 // Construct API URL function
-func constructApiUrl(server, apiKeyServer string, data models.ServerData) (interface{}, error) {
+// constructApiUrl constructs the API request for a given server and data.
+func constructApiUrl(server, apiKeyServer string, data models.ServerData) (ApiRequest, error) {
 	switch server {
-
 	case "1":
-		return fmt.Sprintf(
-			"https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-			apiKeyServer, data.Code,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	case "2":
 		return ApiRequest{
@@ -264,49 +342,70 @@ func constructApiUrl(server, apiKeyServer string, data models.ServerData) (inter
 		}, nil
 
 	case "3":
-		return fmt.Sprintf(
-			"https://smshub.org/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22&maxPrice=%s",
-			apiKeyServer, data.Code, data.Price,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://smshub.org/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22&maxPrice=%s",
+				apiKeyServer, data.Code, data.Price,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	case "4":
-		return fmt.Sprintf(
-			"https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-			apiKeyServer, data.Code,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	case "5":
-		return fmt.Sprintf(
-			"https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-			apiKeyServer, data.Code,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	case "6":
-		return fmt.Sprintf(
-			"https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-			apiKeyServer, data.Code,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	case "7":
-		return fmt.Sprintf(
-			"https://api2.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=false",
-			apiKeyServer, data.Code,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://api2.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=false",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	case "8":
-		return fmt.Sprintf(
-			"https://api2.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=true",
-			apiKeyServer, data.Code,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"https://api2.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=true",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	case "9":
-		return fmt.Sprintf(
-			"http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=%s&quantity=1&country=IN&effectiveTime=10",
-			apiKeyServer, data.Code,
-		), nil
+		return ApiRequest{
+			URL: fmt.Sprintf(
+				"http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=%s&quantity=1&country=IN&effectiveTime=10",
+				apiKeyServer, data.Code,
+			),
+			Headers: map[string]string{}, // Empty headers
+		}, nil
 
 	default:
-		return "", errors.New("invalid server value")
+		return ApiRequest{}, errors.New("invalid server value")
 	}
 }
 

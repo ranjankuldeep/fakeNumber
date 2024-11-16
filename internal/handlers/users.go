@@ -17,7 +17,6 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
-	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -194,34 +193,35 @@ func GoogleSignup(c echo.Context) error {
 		}
 
 		// Generate API key and wallet
-		apiKey := generateAPIKey()
+		// apiKey := generateAPIKey()
 
-		wallet, err := lib.GenerateTronAddress()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to generate TRON wallet"})
-		}
+		// wallet, err := lib.GenerateTronAddress()
+		// if err != nil {
+		// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to generate TRON wallet"})
+		// }
 
-		// todo
-		trxAddress := wallet["address"]
-		trxPrivateKey := wallet["privateKey"]
+		// // todo
+		// trxAddress := wallet["address"]
+		// trxPrivateKey := wallet["privateKey"]
 
-		apiWallet := models.ApiWalletUser{
-			UserID:        newUser.ID,
-			APIKey:        apiKey,
-			Balance:       0,
-			TRXAddress:    trxAddress,
-			TRXPrivateKey: trxPrivateKey,
-		}
+		// apiWallet := models.ApiWalletUser{
+		// 	UserID:        newUser.ID,
+		// 	APIKey:        apiKey,
+		// 	Balance:       0,
+		// 	TRXAddress:    trxAddress,
+		// 	TRXPrivateKey: trxPrivateKey,
+		// }
 
-		apiWalletColl := models.InitializeApiWalletuserCollection(db)
-		_, err = apiWalletColl.InsertOne(context.TODO(), apiWallet)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create wallet"})
-		}
+		// apiWalletColl := models.InitializeApiWalletuserCollection(db)
+		// _, err = apiWalletColl.InsertOne(context.TODO(), apiWallet)
+		// if err != nil {
+		// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create wallet"})
+		// }
 
 		// Generate JWT token
-		token := generateJWT(newUser.Email, newUser.ID.Hex(), "google", trxAddress)
-		return c.JSON(http.StatusOK, map[string]string{"token": token})
+		// token := generateJWT(newUser.Email, newUser.ID.Hex(), "google", trxAddress)
+		// return c.JSON(http.StatusOK, map[string]string{"token": token})
+
 	}
 
 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "User already exists, Please Login."})

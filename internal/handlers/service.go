@@ -94,7 +94,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Server not found."})
 	}
-	server_api_key := serverInfo.Token
 
 	// Find the server list for the specified server name and server number
 	serverListollection := models.InitializeServerListCollection(db)
@@ -121,11 +120,12 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 
 	// fetch id and numbers
-	apiURLRequest, err := constructApiUrl(server, server_api_key, serverData)
+	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't construcrt api url"})
 	}
+	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
 	// handler all the server case and extract id and number
 	switch server {
 	case "1":
@@ -185,6 +185,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Id = id
 		numData.Number = number
 	case "8":
+		// Done
 		// Multiple OTP server with same url
 		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
@@ -194,21 +195,27 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Number = number
 	case "9":
 		// Single OTP server
-		number, id, err := serverscalc.ExtractNumberServer9(apiURLRequest.URL)
+		// Done
+		number, id, err := serverscalc.ExtractNumberServer9()
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			logs.Logger.Error(err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "INSUFFICIENT_ACCOUNT_BALANCE"})
 		}
+		logs.Logger.Info(fmt.Sprintf("id-%s number-%s", id, number))
 		numData.Id = id
 		numData.Number = number
 	case "10":
 		// Single OTP server
 		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
+			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
+		logs.Logger.Info(fmt.Sprintf("id-%s number-%s", id, number))
 		numData.Id = id
 		numData.Number = number
 	case "11":
+		// TODO: FIX the Multi url get number
 		// Multiple OTP server with different url
 		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
 		if err != nil {
@@ -325,7 +332,7 @@ func round(val float64, precision int) float64 {
 
 // Construct API URL function
 // constructApiUrl constructs the API request for a given server and data.
-func constructApiUrl(server, apiKeyServer string, data models.ServerData) (ApiRequest, error) {
+func constructApiUrl(server, apiKeyServer string, apiToken string, data models.ServerData) (ApiRequest, error) {
 	switch server {
 	case "1":
 		return ApiRequest{
@@ -422,7 +429,7 @@ func constructApiUrl(server, apiKeyServer string, data models.ServerData) (ApiRe
 		return ApiRequest{
 			URL: fmt.Sprintf(
 				"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=false",
-				apiKeyServer,
+				apiToken,
 			),
 			Headers: map[string]string{}, // Empty headers
 		}, nil

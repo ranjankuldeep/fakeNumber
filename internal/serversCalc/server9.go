@@ -3,12 +3,22 @@ package serverscalc
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 )
 
-// Response structure to match the API response
-type APIResponse struct {
+// TokenResponse represents the response structure for the token API.
+type TokenResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Token string `json:"token"`
+	} `json:"data"`
+}
+
+// NumberResponse represents the response structure for the number API.
+type NumberResponse struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Data    struct {
@@ -24,42 +34,61 @@ type APIResponse struct {
 	} `json:"data"`
 }
 
-// ExtractNumberAndId fetches and processes the API response to extract the number and ID
-func ExtractNumberServer9(url string) (string, string, error) {
-	// Make HTTP GET request
-	resp, err := http.Get(url)
+// FetchNumberWithToken fetches the token and uses it to fetch the number in one function.
+func ExtractNumberServer9() (string, string, error) {
+	tokenURL := "http://www.phantomunion.com:10023/pickCode-api/push/ticket?key=af725ae5a94b62313009148d6581c9cf"
+	// Step 1: Fetch Token
+	resp, err := http.Get(tokenURL)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("error fetching token: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Read the response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("error reading token response: %w", err)
 	}
 
-	// Parse the JSON response
-	var apiResponse APIResponse
-	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		return "", "", err
+	var tokenResponse TokenResponse
+	if err := json.Unmarshal(body, &tokenResponse); err != nil {
+		return "", "", fmt.Errorf("error parsing token response: %w", err)
 	}
 
-	// Handle response code logic
-	switch apiResponse.Code {
-	case "200":
-		// Extract ID and number if available
-		if len(apiResponse.Data.PhoneNumber) > 0 {
-			serialNumber := apiResponse.Data.PhoneNumber[0].SerialNumber
-			number := apiResponse.Data.PhoneNumber[0].Number
-			return serialNumber, number, nil
-		}
-		return "", "", errors.New("NO_PHONE_NUMBER_AVAILABLE")
-	case "221":
-		return "", "", errors.New("PHONE_NUMBER_IS_INITIATING")
-	case "210":
-		return "", "", errors.New("TOKEN_ERROR")
-	default:
-		return "", "", errors.New(apiResponse.Message)
+	if tokenResponse.Code != "200" {
+		return "", "", errors.New(tokenResponse.Message)
 	}
+
+	token := tokenResponse.Data.Token
+	if token == "" {
+		return "", "", errors.New("no token received from API")
+	}
+
+	// Step 2: Fetch Number
+	fullURL := fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=10643&quantity=1&country=IN&effectiveTime=10", token)
+	resp, err = http.Get(fullURL)
+	if err != nil {
+		return "", "", fmt.Errorf("error fetching number: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("error reading number response: %w", err)
+	}
+
+	var numberResponse NumberResponse
+	if err := json.Unmarshal(body, &numberResponse); err != nil {
+		return "", "", fmt.Errorf("error parsing number response: %w", err)
+	}
+
+	if numberResponse.Code != "200" {
+		return "", "", errors.New(numberResponse.Message)
+	}
+
+	if len(numberResponse.Data.PhoneNumber) == 0 {
+		return "", "", errors.New("no phone number found in response")
+	}
+
+	phoneData := numberResponse.Data.PhoneNumber[0]
+	return phoneData.SerialNumber, phoneData.Number, nil
 }

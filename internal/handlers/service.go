@@ -132,7 +132,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -140,7 +140,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		number, id, err := serverscalc.ExtractNumberServer2(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -148,7 +148,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -156,7 +156,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Single OTP server
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -164,7 +164,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -173,7 +173,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Done
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -181,7 +181,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -190,7 +190,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -200,7 +200,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		number, id, err := serverscalc.ExtractNumberServer9()
 		if err != nil {
 			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "INSUFFICIENT_ACCOUNT_BALANCE"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -209,7 +209,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -233,14 +233,14 @@ func HandleGetNumberRequest(c echo.Context) error {
 
 	// Check user balance
 	if apiWalletUser.Balance < price {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INSUFFICENT_BALANCE"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INSUFFICENT_USER_BALANCE"})
 	}
 
 	// Deduct balance and save to DB
 	newBalance := apiWalletUser.Balance - price
 	_, err = apiWalletUserCollection.UpdateOne(ctx, bson.M{"_id": user.ID}, bson.M{"$set": bson.M{"balance": newBalance}})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user balance."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_UPDATE_USER_BALANCE"})
 	}
 
 	// Save transaction history
@@ -344,12 +344,9 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 
 	case "2":
 		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://5sim.net/v1/user/buy/activation/india/virtual21/%s",
-				data.Code,
-			),
+			URL: "https://5sim.net/v1/user/profile",
 			Headers: map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", apiKeyServer),
+				"Authorization": fmt.Sprintf("Bearer %s", apiToken),
 				"Accept":        "application/json",
 			},
 		}, nil

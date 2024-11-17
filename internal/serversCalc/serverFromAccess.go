@@ -46,7 +46,7 @@ func ExtractNumberServerFromAccess(url string, headers map[string]string) (strin
 	// Split the response into parts
 	responseParts := strings.Split(responseData, ":")
 	if len(responseParts) < 3 {
-		return "", "", errors.New("invalid response format")
+		return "", "", errors.New("INVALID_RESPONSE_FORMAT")
 	}
 
 	// Extract id and number

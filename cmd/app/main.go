@@ -84,6 +84,7 @@ func main() {
 	routes.RegisterUserRoutes(e)
 	routes.RegisterApiWalletRoutes(e)
 	routes.RegisterHistoryRoutes(e)
+	routes.RegisterRechargeRoutes(e)
 
 	e.Logger.Fatal(e.Start(":8000"))
 }

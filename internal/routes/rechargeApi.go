@@ -7,7 +7,7 @@ import (
 
 // RegisterRechargeRoutes sets up routes for recharge-related operations.
 func RegisterRechargeRoutes(e *echo.Echo) {
-	rechargeGroup := e.Group("/")
+	rechargeGroup := e.Group("/api/")
 
 	// Define GET routes
 	rechargeGroup.GET("recharge-upi-transaction", handlers.RechargeUpiApi)

@@ -932,7 +932,7 @@ func GetAllBlockedUsers(c echo.Context) error {
 // GetOrdersByUserId retrieves orders by a specific user ID
 func GetOrdersByUserId(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	orderCol := db.Collection("orders")
+	orderCol := models.InitializeOrderCollection(db)
 
 	userId := c.QueryParam("userId")
 	if userId == "" {
@@ -943,7 +943,8 @@ func GetOrdersByUserId(c echo.Context) error {
 	defer cancel()
 
 	// Query to find orders for the userId and sort them by orderTime in descending order
-	filter := bson.M{"userId": userId}
+	userPrimitiveId, _ := primitive.ObjectIDFromHex(userId)
+	filter := bson.M{"userId": userPrimitiveId}
 	opts := options.Find().SetSort(bson.D{{Key: "orderTime", Value: -1}})
 
 	cursor, err := orderCol.Find(ctx, filter, opts)
@@ -955,9 +956,9 @@ func GetOrdersByUserId(c echo.Context) error {
 	// Decode the cursor into a slice of orders
 	var orders []bson.M
 	if err := cursor.All(ctx, &orders); err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error decoding orders", "error": err.Error()})
 	}
-
 	return c.JSON(http.StatusOK, orders)
 }
 

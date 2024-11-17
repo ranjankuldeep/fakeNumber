@@ -277,7 +277,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save order."})
 	}
-	return c.JSON(http.StatusOK, map[string]string{"number": numData.Number, "id": numData.Id})
+	return c.JSON(http.StatusOK, map[string]string{"id": numData.Id, "number": numData.Number})
 }
 
 // Helper Functions
@@ -556,11 +556,12 @@ func HandleGetOtp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "All fields (id, api_key, server) are required"})
 	}
 
-	client := c.Get("db").(*mongo.Client)
-	db := client.Database("your_database_name")
+	db := c.Get("db").(*mongo.Database)
 
 	var apiWalletUser models.ApiWalletUser
-	err := db.Collection("ApiWalletUser").FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	apiWalletColl := models.InitializeApiWalletuserCollection(db)
+
+	err := apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid API key"})
 	}

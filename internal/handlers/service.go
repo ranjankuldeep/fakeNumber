@@ -130,7 +130,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	switch server {
 	case "1":
 		// Multiple OTP server with same url
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
@@ -146,7 +146,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Number = number
 	case "3":
 		// Multiple OTP server with same url
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
@@ -154,7 +154,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Number = number
 	case "4":
 		// Single OTP server
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
@@ -162,7 +162,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Number = number
 	case "5":
 		// Multiple OTP server with same url
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
@@ -170,7 +170,8 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Number = number
 	case "6":
 		// Single OTP server
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		// Done
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
@@ -178,7 +179,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Number = number
 	case "7":
 		// Multiple OTP server with same url
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
@@ -187,7 +188,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	case "8":
 		// Done
 		// Multiple OTP server with same url
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
@@ -201,17 +202,15 @@ func HandleGetNumberRequest(c echo.Context) error {
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "INSUFFICIENT_ACCOUNT_BALANCE"})
 		}
-		logs.Logger.Info(fmt.Sprintf("id-%s number-%s", id, number))
 		numData.Id = id
 		numData.Number = number
 	case "10":
 		// Single OTP server
-		number, id, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
-		logs.Logger.Info(fmt.Sprintf("id-%s number-%s", id, number))
 		numData.Id = id
 		numData.Number = number
 	case "11":
@@ -222,10 +221,10 @@ func HandleGetNumberRequest(c echo.Context) error {
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
 		}
-		logs.Logger.Info(fmt.Sprintf("id-%s number-%s", id, number))
 		numData.Id = id
 		numData.Number = number
 	}
+	logs.Logger.Info(fmt.Sprintf("id-%s number-%s", numData.Id, numData.Number))
 
 	// update the price with the discount
 	price, _ := strconv.ParseFloat(serverData.Price, 64)
@@ -234,7 +233,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 
 	// Check user balance
 	if apiWalletUser.Balance < price {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Insufficient balance."})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INSUFFICENT_BALANCE"})
 	}
 
 	// Deduct balance and save to DB

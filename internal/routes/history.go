@@ -7,7 +7,7 @@ import (
 
 // RegisterHistoryRoutes sets up routes for history-related operations.
 func RegisterHistoryRoutes(e *echo.Echo) {
-	historyGroup := e.Group("/")
+	historyGroup := e.Group("/api/")
 
 	// Define routes
 	historyGroup.GET("recharge-history", handlers.GetRechargeHistory)

@@ -192,38 +192,55 @@ func CreateOrUpdateAPIKeyHandler(c echo.Context) error {
 }
 
 // Handler to retrieve the UPI QR code
+// Handler to retrieve the UPI QR code
+// Handler to retrieve the UPI QR code
 func GetUpiQR(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
-	serverCol := db.Collection("servers") // Ensure this matches your actual MongoDB collection name
+	// Logger: Start of the function
+	fmt.Println("INFO: GetUpiQR handler invoked")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// db := c.Get("db").(*mongo.Database)
+	// serverCol := db.Collection("servers") // Ensure this matches your actual MongoDB collection name
 
-	// Check for maintenance mode
-	var serverData struct {
-		Maintenance bool `bson:"maintainance"`
-	}
-	err := serverCol.FindOne(ctx, bson.M{"server": 0}).Decode(&serverData)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.JSON(http.StatusNotFound, echo.Map{"error": "Server data not found"})
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
+
+	/*
+		// Logger: Checking for maintenance mode
+		fmt.Println("INFO: Checking server maintenance status")
+		var serverData struct {
+			Maintenance bool `bson:"maintainance"`
 		}
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-	}
+		err := serverCol.FindOne(ctx, bson.M{"server": 0}).Decode(&serverData)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				// Logger: No server data found
+				fmt.Println("ERROR: Server data not found in the database")
+				return c.JSON(http.StatusNotFound, echo.Map{"error": "Server data not found"})
+			}
+			// Logger: Error decoding server data
+			fmt.Println("ERROR: Error decoding server data", err)
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+		}
 
-	if serverData.Maintenance {
-		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
-	}
+		if serverData.Maintenance {
+			// Logger: Site is under maintenance
+			fmt.Println("INFO: Site is under maintenance")
+			return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
+		}
+	*/
 
-	// Define the file path where the QR code is saved
+	// Logger: Checking if QR code file exists
+	fmt.Println("INFO: Checking if QR code file exists")
 	filePath := filepath.Join("uploads", "upi-qr-code.png")
 
-	// Check if the file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Logger: QR code file not found
+		fmt.Println("ERROR: QR code file not found")
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "QR code file not found"})
 	}
 
-	// Send the file as a response
+	// Logger: Sending QR code file as a response
+	fmt.Println("INFO: Sending QR code file")
 	return c.File(filePath)
 }
 

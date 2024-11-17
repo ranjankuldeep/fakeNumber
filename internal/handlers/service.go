@@ -269,7 +269,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		Price:          price,
 		Server:         serverNumber,
 		NumberID:       numData.Id,
-		Number:         numData.Id,
+		Number:         numData.Number,
 		OrderTime:      time.Now(),
 		ExpirationTime: time.Now().Add(20 * time.Minute),
 	}

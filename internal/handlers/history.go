@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -88,7 +89,7 @@ func GetTransactionHistory(c echo.Context) error {
 	for i, j := 0, len(transactionHistoryData)-1; i < j; i, j = i+1, j-1 {
 		transactionHistoryData[i], transactionHistoryData[j] = transactionHistoryData[j], transactionHistoryData[i]
 	}
-
+	log.Println(transactionHistoryData)
 	return c.JSON(http.StatusOK, transactionHistoryData)
 }
 

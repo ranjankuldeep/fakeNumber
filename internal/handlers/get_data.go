@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Handler to retrieve servers data by service name
@@ -165,6 +166,7 @@ type ServerDetail struct {
 }
 
 func GetServiceData(c echo.Context) error {
+
 	userId := c.QueryParam("userId")
 	db := c.Get("db").(*mongo.Database)
 
@@ -365,6 +367,135 @@ func GetUserServiceData(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, filteredData)
+}
+
+type ServiceServer struct {
+	ServerNumber int    `bson:"serverNumber" json:"serverNumber"`
+	Price        string `bson:"price" json:"price"`
+}
+
+type Service struct {
+	Name        string          `bson:"name" json:"name"`
+	LowestPrice string          `bson:"lowestPrice" json:"lowestPrice"`
+	Servers     []ServiceServer `bson:"servers" json:"servers"`
+}
+
+type Discount struct {
+	Service  string  `bson:"service" json:"service"`
+	Server   int     `bson:"server" json:"server"`
+	Discount float64 `bson:"discount" json:"discount"`
+}
+
+func GetServiceDataAdmin(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+
+	// Logger: Start of the function
+	log.Println("INFO: Fetching service data for admin")
+
+	// Fetch the server list data
+	var serverListData []Service
+	serverListCol := db.Collection("serverList")
+
+	log.Println("INFO: Fetching server list data...")
+	findOptions := options.Find().SetProjection(bson.M{
+		"name":        1,
+		"lowestPrice": 1,
+		"servers":     1,
+	})
+
+	cursor, err := serverListCol.Find(context.Background(), bson.M{}, findOptions)
+	if err != nil {
+		log.Println("ERROR: Failed to fetch server list data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch server list data"})
+	}
+	if err := cursor.All(context.Background(), &serverListData); err != nil {
+		log.Println("ERROR: Failed to decode server list data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to decode server list data"})
+	}
+	if len(serverListData) == 0 {
+		log.Println("INFO: No server list data found")
+		return c.JSON(http.StatusOK, []Service{}) // Return empty array
+	}
+	log.Println("INFO: Successfully fetched server list data")
+
+	// Fetch the service discount data
+	var serviceDiscountData []Discount
+	serviceDiscountCol := db.Collection("serviceDiscounts")
+
+	log.Println("INFO: Fetching service discount data...")
+	cursor, err = serviceDiscountCol.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Println("ERROR: Failed to fetch service discount data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch service discount data"})
+	}
+	if err := cursor.All(context.Background(), &serviceDiscountData); err != nil {
+		log.Println("ERROR: Failed to decode service discount data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to decode service discount data"})
+	}
+	log.Println("INFO: Successfully fetched service discount data")
+
+	// Fetch the server discount data
+	var serverDiscountData []Discount
+	serverDiscountCol := db.Collection("serverDiscounts")
+
+	log.Println("INFO: Fetching server discount data...")
+	cursor, err = serverDiscountCol.Find(context.Background(), bson.M{})
+	if err != nil {
+		log.Println("ERROR: Failed to fetch server discount data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch server discount data"})
+	}
+	if err := cursor.All(context.Background(), &serverDiscountData); err != nil {
+		log.Println("ERROR: Failed to decode server discount data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to decode server discount data"})
+	}
+	log.Println("INFO: Successfully fetched server discount data")
+
+	// Create maps for discounts
+	log.Println("INFO: Creating discount maps...")
+	serviceDiscountMap := make(map[string]float64)
+	for _, discount := range serviceDiscountData {
+		key := discount.Service + "_" + strconv.Itoa(discount.Server)
+		serviceDiscountMap[key] = discount.Discount
+	}
+
+	serverDiscountMap := make(map[int]float64)
+	for _, discount := range serverDiscountData {
+		serverDiscountMap[discount.Server] = discount.Discount
+	}
+	log.Println("INFO: Discount maps created")
+
+	// Sort and process server list data
+	log.Println("INFO: Sorting server list data...")
+	sort.Slice(serverListData, func(i, j int) bool {
+		return serverListData[i].Name < serverListData[j].Name
+	})
+
+	for i, service := range serverListData {
+		sort.Slice(service.Servers, func(a, b int) bool {
+			return service.Servers[a].ServerNumber < service.Servers[b].ServerNumber
+		})
+
+		for j, server := range service.Servers {
+			// Compute discounts
+			serviceKey := service.Name + "_" + strconv.Itoa(server.ServerNumber)
+			discount := serviceDiscountMap[serviceKey] + serverDiscountMap[server.ServerNumber]
+
+			// Log discount information
+			log.Printf("INFO: Service: %s, ServerNumber: %d, Discount: %.2f\n", service.Name, server.ServerNumber, discount)
+
+			// Apply discounts to the server price
+			originalPrice, err := strconv.ParseFloat(server.Price, 64)
+			if err != nil {
+				log.Printf("ERROR: Invalid price format for service %s, server %d: %v\n", service.Name, server.ServerNumber, err)
+				continue
+			}
+			finalPrice := originalPrice + discount
+			serverListData[i].Servers[j].Price = strconv.FormatFloat(finalPrice, 'f', 2, 64)
+		}
+	}
+	log.Println("INFO: Successfully processed server list data")
+
+	return c.JSON(http.StatusOK, serverListData)
 }
 
 // Helper functions

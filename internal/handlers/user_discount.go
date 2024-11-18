@@ -110,23 +110,53 @@ func DeleteUserDiscount(c echo.Context) error {
 
 // GetAllUserDiscounts retrieves all user discounts
 func GetAllUserDiscounts(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("userDiscount")
+	// Log: Start of the function
+	log.Println("INFO: Starting GetAllUserDiscounts handler")
 
+	db := c.Get("db").(*mongo.Database)
+	userDiscountCollection := db.Collection("user-discounts")
+
+	log.Println("INFO: Fetching all user discounts from the database...")
 	var allDiscounts []models.UserDiscount
+
+	// Find all documents in the userDiscount collection
 	cursor, err := userDiscountCollection.Find(context.Background(), bson.M{})
 	if err != nil {
+		log.Println("ERROR: Error fetching all discounts from the database:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching all discounts"})
 	}
-	defer cursor.Close(context.Background())
+	defer func() {
+		if err := cursor.Close(context.Background()); err != nil {
+			log.Println("ERROR: Error closing the cursor:", err)
+		}
+	}()
 
+	// Iterate over the cursor to decode each discount
 	for cursor.Next(context.Background()) {
 		var discount models.UserDiscount
 		if err := cursor.Decode(&discount); err != nil {
-			log.Println("Error decoding discount:", err)
+			log.Println("ERROR: Error decoding discount document:", err)
 		} else {
 			allDiscounts = append(allDiscounts, discount)
+			log.Printf("INFO: Discount added to the list: %+v\n", discount)
 		}
 	}
+
+	// Check for any errors during iteration
+	if err := cursor.Err(); err != nil {
+		log.Println("ERROR: Cursor iteration error:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error iterating over discounts"})
+	}
+
+	// Log the total number of discounts fetched
+	log.Printf("INFO: Successfully fetched %d user discounts\n", len(allDiscounts))
+
+	// Return an empty array if no discounts are found
+	if len(allDiscounts) == 0 {
+		log.Println("INFO: No user discounts found, returning an empty array.")
+		return c.JSON(http.StatusOK, []models.UserDiscount{})
+	}
+
+	// Return the result
 	return c.JSON(http.StatusOK, allDiscounts)
 }

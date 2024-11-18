@@ -20,5 +20,5 @@ type UserDiscount struct {
 
 // InitializeUserDiscountCollection initializes the collection for "user-discount"
 func InitializeUserDiscountCollection(db *mongo.Database) *mongo.Collection {
-	return db.Collection("userDiscount")
+	return db.Collection("user-discounts")
 }

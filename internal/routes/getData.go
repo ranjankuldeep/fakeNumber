@@ -12,7 +12,7 @@ func RegisterGetDataRoutes(e *echo.Echo) {
 	// Define routes
 	dataGroup.GET("get-service-data", handlers.GetServiceData)
 	dataGroup.GET("get-service", handlers.GetUserServiceData)
-	// dataGroup.GET("get-service-data-admin", handlers.GetServiceDataAdmin)
+	dataGroup.GET("get-service-data-admin", handlers.GetServiceDataAdmin)
 	dataGroup.GET("get-service-data-server", handlers.GetServersData)
 	dataGroup.GET("total-recharge-balance", handlers.TotalRecharge)
 	dataGroup.GET("total-user-count", handlers.GetTotalUserCount)

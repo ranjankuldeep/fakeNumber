@@ -7,11 +7,11 @@ import (
 
 // RegisterUserRoutes sets up the user-related routes.
 func RegisterUserDiscountRoutes(e *echo.Echo) {
-	userGroup := e.Group("/users")
+	userGroup := e.Group("/api/users/")
 
 	// Define routes and link them to controller functions
-	userGroup.POST("/add-discount", handlers.AddUserDiscount)
-	userGroup.GET("/get-discount", handlers.GetUserDiscount)
-	userGroup.DELETE("/delete-discount", handlers.DeleteUserDiscount)
-	userGroup.GET("/get-all-discounts", handlers.GetAllUserDiscounts)
+	userGroup.POST("add-discount", handlers.AddUserDiscount)
+	userGroup.GET("get-discount", handlers.GetUserDiscount)
+	userGroup.DELETE("delete-discount", handlers.DeleteUserDiscount)
+	userGroup.GET("get-all-discounts", handlers.GetAllUserDiscounts)
 }

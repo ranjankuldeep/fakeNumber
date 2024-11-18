@@ -754,7 +754,7 @@ func GetAllUsers(c echo.Context) error {
 func GetUser(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	userCol := db.Collection("users")
-	walletCol := db.Collection("wallets")
+	walletCol := db.Collection("apikey_and_balances")
 
 	// Retrieve userId from query parameters
 	userId := c.QueryParam("userId")

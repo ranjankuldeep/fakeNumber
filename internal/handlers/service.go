@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -590,8 +592,134 @@ func HandleGetOtp(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
 }
 
+type Server struct {
+	Server int    `bson:"server"`
+	APIKey string `bson:"api_key"`
+}
+
+func searchCodes(codes []string, db *mongo.Database) ([]string, error) {
+	results := []string{}
+	collection := db.Collection("serverList")
+
+	for _, code := range codes {
+		var serverData struct {
+			Name    string `bson:"name"`
+			Servers []struct {
+				Code         string `bson:"code"`
+				ServerNumber int    `bson:"server"`
+			} `bson:"servers"`
+		}
+
+		err := collection.FindOne(context.TODO(), bson.M{"servers.code": code}).Decode(&serverData)
+		if err != nil {
+			log.Printf("Error searching for code %s: %v\n", code, err)
+			continue
+		}
+
+		for _, server := range serverData.Servers {
+			if server.Code == code && server.ServerNumber == 1 {
+				results = append(results, serverData.Name)
+				break
+			}
+		}
+	}
+
+	return results, nil
+}
 func HandleCheckOTP(c echo.Context) error {
-	return nil
+	otp := c.QueryParam("otp")
+	apiKey := c.QueryParam("api_key")
+	fmt.Println("DEBUG: Received request with OTP:", otp, "and API Key:", apiKey)
+
+	// Validate input parameters
+	if otp == "" {
+		fmt.Println("ERROR: OTP is missing")
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "OTP is required"})
+	}
+	if apiKey == "" {
+		fmt.Println("ERROR: API Key is missing")
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "API Key is required"})
+	}
+
+	db := c.Get("db").(*mongo.Database)
+
+	// Fetch server data
+	fmt.Println("DEBUG: Fetching server data for server 1")
+	var serverData Server
+	err := db.Collection("servers").FindOne(context.TODO(), bson.M{"server": 1}).Decode(&serverData)
+	if err != nil {
+		fmt.Println("ERROR: Failed to fetch server data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Server not found"})
+	}
+	fmt.Println("DEBUG: Retrieved server data:", serverData)
+
+	// Call external OTP service
+	encodedOtp := url.QueryEscape(otp)
+	url := fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=d91be54bb695297dd517edfdf7da5add&action=getOtp&sms=%s", encodedOtp)
+	fmt.Println("DEBUG: Fetching OTP data from URL:", url)
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("ERROR: Failed to fetch OTP data from external service:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch OTP data"})
+	}
+	defer resp.Body.Close()
+
+	var data interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		fmt.Println("ERROR: Failed to decode response from OTP service:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid response from OTP service"})
+	}
+	fmt.Println("DEBUG: OTP service response:", data)
+
+	// Handle the response
+	switch v := data.(type) {
+	case bool:
+		fmt.Println("DEBUG: Response type is bool:", v)
+		if !v {
+			fmt.Println("ERROR: OTP not found")
+			return c.JSON(http.StatusNotFound, echo.Map{"error": "OTP not found"})
+		}
+	case []interface{}:
+		fmt.Println("DEBUG: Response type is array:", v)
+		codes := []string{}
+		if strings.Contains(v[0].(string), "|") {
+			parts := strings.Split(v[0].(string), "|")
+			fmt.Println("DEBUG: Splitting codes:", parts)
+			for _, part := range parts {
+				code := strings.TrimSpace(strings.ReplaceAll(part, `\d`, ""))
+				if code != "" {
+					codes = append(codes, code)
+				}
+			}
+		} else {
+			code := strings.TrimSpace(strings.ReplaceAll(v[0].(string), `\d`, ""))
+			codes = append(codes, code)
+		}
+		fmt.Println("DEBUG: Extracted codes:", codes)
+
+		// Search for matching codes in the database
+		results, err := searchCodes(codes, db)
+		if err != nil {
+			fmt.Println("ERROR: Failed to search codes:", err)
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to search codes"})
+		}
+		fmt.Println("DEBUG: Search results:", results)
+
+		if len(results) > 0 {
+			fmt.Println("DEBUG: Found matching results")
+			return c.JSON(http.StatusOK, echo.Map{"results": results})
+		} else {
+			fmt.Println("ERROR: No valid data found for the provided codes")
+			return c.JSON(http.StatusNotFound, echo.Map{"error": "No valid data found for the provided codes"})
+		}
+	default:
+		fmt.Println("ERROR: Unexpected response format:", v)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Unexpected response format"})
+	}
+
+	// This line should never be reached
+	fmt.Println("ERROR: Unhandled case reached")
+	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Unhandled case"})
 }
 
 func HandleNumberCancel(c echo.Context) error {

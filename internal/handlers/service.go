@@ -554,8 +554,14 @@ func HandleGetOtp(c echo.Context) error {
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
 
-	if id == "" || apiKey == "" || server == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "All fields (id, api_key, server) are required"})
+	if id == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
+	}
+	if apiKey == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_APIKEY"})
+	}
+	if server == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
 	}
 
 	db := c.Get("db").(*mongo.Database)
@@ -564,18 +570,21 @@ func HandleGetOtp(c echo.Context) error {
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
 
 	err := apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid API key"})
+	if err != nil || err == mongo.ErrEmptySlice {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
 	}
 
 	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid server or maintenance issue"})
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
 	// construct api url and headers
-	constructedRequest, err := constructOtpUrl(server, serverData.APIKey, id)
+	constructedRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
 	if err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid server or maintenance issue"})
 	}
 
@@ -808,7 +817,7 @@ func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, 
 		return models.Server{}, err
 	}
 	if serverData.Maintenance == true {
-		return models.Server{}, fmt.Errorf("server is under maintainance")
+		return models.Server{}, fmt.Errorf("SERVER_UNDER_MAINTENANCE")
 	}
 	return serverData, nil
 }
@@ -891,7 +900,7 @@ func parseResponse(server string, responseData string) (string, error) {
 	return "", errors.New("unknown response format")
 }
 
-func constructOtpUrl(server, apiKeyServer, id string) (ApiRequest, error) {
+func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error) {
 	var request ApiRequest
 	request.Headers = make(map[string]string)
 
@@ -910,13 +919,16 @@ func constructOtpUrl(server, apiKeyServer, id string) (ApiRequest, error) {
 		request.URL = fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
 	case "6":
 		request.URL = fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
-	case "7", "8":
-		request.URL = fmt.Sprintf("https://api2.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id)
+	case "7":
+		request.URL = fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+	case "8":
+		request.URL = fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
 	case "9":
-		request.URL = fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/sweetWrapper?token=%s&serialNumber=%s", apiKeyServer, id)
-	default:
-		return ApiRequest{}, errors.New("invalid server value")
+		request.URL = fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/sweetWrapper?token=%s&serialNumber=%s", token, id)
+	case "10":
+		request.URL = fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+	case "11":
+		request.URL = fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id)
 	}
-
 	return request, nil
 }

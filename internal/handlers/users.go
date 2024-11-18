@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 
 	"net/http"
 	"os"
@@ -903,29 +904,49 @@ func BlockedUser(c echo.Context) error {
 }
 
 // GetAllBlockedUsers retrieves all blocked users
+// GetAllBlockedUsers retrieves all blocked users
 func GetAllBlockedUsers(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
+	// Retrieve the database instance
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+
+	// Access the "users" collection
 	userCol := db.Collection("users")
 
+	// Define context with a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Query for all users with "blocked" set to true
 	cursor, err := userCol.Find(ctx, bson.M{"blocked": true})
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return c.JSON(http.StatusNotFound, echo.Map{"error": "No blocked users found"})
-		}
+		log.Println("ERROR: Error querying blocked users:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
-	defer cursor.Close(ctx)
+	defer func() {
+		if err := cursor.Close(ctx); err != nil {
+			log.Println("ERROR: Error closing cursor:", err)
+		}
+	}()
 
-	// Parse the results into a slice of documents
+	// Parse the results into a slice of users
 	var blockedUsers []bson.M
 	if err := cursor.All(ctx, &blockedUsers); err != nil {
+		log.Println("ERROR: Failed to parse blocked users:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to parse blocked users"})
 	}
 
+	// Handle case when no blocked users are found
+	if len(blockedUsers) == 0 {
+		log.Println("INFO: No blocked users found")
+		return c.JSON(http.StatusOK, echo.Map{"data": []bson.M{}})
+	}
+
+	// Log and return the results
+	log.Printf("INFO: Retrieved %d blocked users\n", len(blockedUsers))
 	return c.JSON(http.StatusOK, echo.Map{"data": blockedUsers})
 }
 

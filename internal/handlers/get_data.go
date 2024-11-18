@@ -394,7 +394,7 @@ func GetServiceDataAdmin(c echo.Context) error {
 
 	// Fetch the server list data
 	var serverListData []Service
-	serverListCol := db.Collection("serverList")
+	serverListCol := db.Collection("serverlists")
 
 	log.Println("INFO: Fetching server list data...")
 	findOptions := options.Find().SetProjection(bson.M{

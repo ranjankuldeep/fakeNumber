@@ -7,10 +7,10 @@ import (
 
 // RegisterServiceDiscountRoutes sets up routes for service discounts.
 func RegisterServiceDiscountRoutes(e *echo.Echo) {
-	serviceGroup := e.Group("/service")
+	serviceGroup := e.Group("/api/service/")
 
 	// Define routes and link them to handler functions
-	serviceGroup.POST("/add-discount", handlers.AddServiceDiscount)
-	serviceGroup.GET("/get-discount", handlers.GetServiceDiscount)
-	serviceGroup.DELETE("/delete-discount", handlers.DeleteServiceDiscount)
+	serviceGroup.POST("add-discount", handlers.AddServiceDiscount)
+	serviceGroup.GET("get-discount", handlers.GetServiceDiscount)
+	serviceGroup.DELETE("delete-discount", handlers.DeleteServiceDiscount)
 }

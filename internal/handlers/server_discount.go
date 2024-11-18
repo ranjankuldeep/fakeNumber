@@ -41,20 +41,47 @@ func AddDiscount(c echo.Context) error {
 
 // Handler to get all server discounts
 func GetDiscount(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
+	// Log: Start of the function
+	log.Println("INFO: Starting GetDiscount handler")
+
+	// Fetch the database instance
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+	log.Println("INFO: Database instance retrieved successfully")
+
+	// Initialize a slice to store server discounts
 	var serverDiscounts []models.ServerDiscount
+
+	// Log: Querying the database
+	log.Println("INFO: Fetching discounts from the 'server_discount' collection")
 	cursor, err := db.Collection("server_discount").Find(context.Background(), bson.M{})
 	if err != nil {
-		log.Println("Error fetching discounts:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		log.Println("ERROR: Error fetching discounts from database:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching discounts"})
 	}
-	defer cursor.Close(context.Background())
+	defer func() {
+		if err := cursor.Close(context.Background()); err != nil {
+			log.Println("ERROR: Error closing cursor:", err)
+		} else {
+			log.Println("INFO: Cursor closed successfully")
+		}
+	}()
 
+	// Log: Parsing the data
+	log.Println("INFO: Decoding fetched discounts")
 	if err = cursor.All(context.Background(), &serverDiscounts); err != nil {
-		log.Println("Error parsing discounts:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		log.Println("ERROR: Error decoding discounts:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error parsing discounts"})
 	}
 
+	// Log: Successfully fetched discounts
+	log.Printf("INFO: Successfully fetched %d discounts\n", len(serverDiscounts))
+
+	// Return the discounts
+	log.Println("INFO: Returning fetched discounts")
 	return c.JSON(http.StatusOK, serverDiscounts)
 }
 

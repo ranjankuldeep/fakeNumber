@@ -86,6 +86,8 @@ func main() {
 	routes.RegisterHistoryRoutes(e)
 	routes.RegisterRechargeRoutes(e)
 	routes.RegisterUserDiscountRoutes(e)
+	routes.RegisterServerRoutes(e)
+	routes.RegisterServiceDiscountRoutes(e)
 
 	e.Logger.Fatal(e.Start(":8000"))
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -51,8 +52,9 @@ func AddServer(c echo.Context) error {
 
 // Get all servers
 func GetServer(c echo.Context) error {
+	fmt.Println("GetServer")
 	db := c.Get("db").(*mongo.Database)
-	serverCollection := db.Collection("server")
+	serverCollection := db.Collection("servers")
 
 	var servers []models.Server
 	cursor, err := serverCollection.Find(context.Background(), bson.M{}, options.Find().SetSort(bson.M{"server": 1}))

@@ -480,9 +480,6 @@ func GetServiceDataAdmin(c echo.Context) error {
 			serviceKey := service.Name + "_" + strconv.Itoa(server.ServerNumber)
 			discount := serviceDiscountMap[serviceKey] + serverDiscountMap[server.ServerNumber]
 
-			// Log discount information
-			log.Printf("INFO: Service: %s, ServerNumber: %d, Discount: %.2f\n", service.Name, server.ServerNumber, discount)
-
 			// Apply discounts to the server price
 			originalPrice, err := strconv.ParseFloat(server.Price, 64)
 			if err != nil {

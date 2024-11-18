@@ -7,7 +7,7 @@ import (
 
 // RegisterServerRoutes sets up server-related routes.
 func RegisterServerRoutes(e *echo.Echo) {
-	serverGroup := e.Group("/")
+	serverGroup := e.Group("/api/")
 
 	// Define routes and link them to handler functions
 	serverGroup.POST("add-server", handlers.AddServer)

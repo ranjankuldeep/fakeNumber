@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -70,36 +71,66 @@ func AddServiceDiscount(c echo.Context) error {
 
 // getServiceDiscount handles fetching all service discounts.
 func GetServiceDiscount(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
-	// Define a struct to map the expected request body
-	type RequestBody struct {
-		Service  string  `json:"service"`  // JSON field name
-		Server   string  `json:"server"`   // JSON field name
-		Discount float64 `json:"discount"` // JSON field name
-	}
+	// Log: Start of the function
+	log.Println("INFO: Starting GetServiceDiscount handler")
 
-	// Initialize an instance of the struct
-	var input RequestBody
-	if err := c.Bind(input); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
+	// Retrieve the database instance
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
+	log.Println("INFO: Database instance retrieved successfully")
 
-	servicedDiscountCollection := models.InitializeServiceDiscountCollection(db)
+	// Initialize the service discount collection
+	log.Println("INFO: Initializing service discount collection")
+	serviceDiscountCollection := models.InitializeServiceDiscountCollection(db)
+
+	// Fetch service discounts from the collection
+	log.Println("INFO: Fetching all service discounts from the database")
 	var serviceDiscounts []models.ServiceDiscount
-	cursor, err := servicedDiscountCollection.Find(context.TODO(), bson.M{})
+	cursor, err := serviceDiscountCollection.Find(context.TODO(), bson.M{})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch service discounts."})
+		log.Println("ERROR: Failed to fetch service discounts:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch service discounts"})
 	}
-	defer cursor.Close(context.TODO())
+	defer func() {
+		if err := cursor.Close(context.TODO()); err != nil {
+			log.Println("ERROR: Failed to close cursor:", err)
+		} else {
+			log.Println("INFO: Cursor closed successfully")
+		}
+	}()
 
+	// Iterate over the cursor and decode service discounts
+	log.Println("INFO: Decoding service discount data")
 	for cursor.Next(context.TODO()) {
 		var serviceDiscount models.ServiceDiscount
 		if err := cursor.Decode(&serviceDiscount); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error decoding service discount."})
+			log.Println("ERROR: Error decoding service discount:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error decoding service discount"})
 		}
 		serviceDiscounts = append(serviceDiscounts, serviceDiscount)
+		log.Printf("INFO: Service discount added: %+v\n", serviceDiscount)
 	}
 
+	// Check for any errors during cursor iteration
+	if err := cursor.Err(); err != nil {
+		log.Println("ERROR: Cursor iteration error:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error iterating service discounts"})
+	}
+
+	// Log: Successfully fetched discounts
+	log.Printf("INFO: Successfully fetched %d service discounts\n", len(serviceDiscounts))
+
+	// Ensure an empty array is returned if no data exists
+	if len(serviceDiscounts) == 0 {
+		log.Println("INFO: No service discounts found, returning an empty array")
+		return c.JSON(http.StatusOK, []models.ServiceDiscount{})
+	}
+
+	// Return the fetched service discounts
+	log.Println("INFO: Returning service discounts")
 	return c.JSON(http.StatusOK, serviceDiscounts)
 }
 

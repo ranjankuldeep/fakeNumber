@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -326,32 +327,55 @@ func UpdateBalanceHandler(c echo.Context) error {
 
 // GetAPIKeyHandler handles fetching an API key based on recharge type
 func GetAPIKeyHandler(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
-	rechargeCol := db.Collection("recharge_api") // Ensure this matches your collection name
+	// Log the start of the function
+	log.Println("INFO: Starting GetAPIKeyHandler")
+
+	// Retrieve the database instance from context
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	log.Println("INFO: Database instance retrieved successfully")
+
+	// Define the collection name
+	rechargeCol := db.Collection("recharge-apis")
+	log.Println("INFO: Collection initialized: recharge-apis")
 
 	// Get the "type" query parameter
 	rechargeType := c.QueryParam("type")
+	log.Printf("INFO: Received query parameter - type: %s\n", rechargeType)
 
-	// Validate that the type is provided
+	// Validate that the "type" parameter is provided
 	if rechargeType == "" {
+		log.Println("ERROR: Missing required query parameter 'type'")
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "recharge_type is required"})
 	}
 
 	// MongoDB context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	log.Println("INFO: MongoDB context created with 5-second timeout")
 
 	// Query the database for the document with the specified recharge type
 	var doc struct {
 		APIKey string `bson:"api_key"`
 	}
+	log.Printf("INFO: Querying database for recharge_type: %s\n", rechargeType)
 	err := rechargeCol.FindOne(ctx, bson.M{"recharge_type": rechargeType}).Decode(&doc)
+
+	// Handle potential errors
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
+			log.Printf("INFO: No document found for recharge_type: %s\n", rechargeType)
 			return c.JSON(http.StatusNotFound, echo.Map{"message": "API key not found"})
 		}
+		log.Println("ERROR: Failed to query database:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
+
+	// Log the successfully retrieved API key
+	log.Printf("INFO: Successfully retrieved API key for recharge_type: %s\n", rechargeType)
 
 	// Respond with the API key
 	return c.JSON(http.StatusOK, echo.Map{"api_key": doc.APIKey})

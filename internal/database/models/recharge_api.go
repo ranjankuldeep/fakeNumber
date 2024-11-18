@@ -20,7 +20,7 @@ type RechargeAPI struct {
 
 // InitializeRechargeAPICollection initializes the collection for "recharge-api"
 func InitializeRechargeAPICollection(db *mongo.Database) *mongo.Collection {
-	collection := db.Collection("recharge-api")
+	collection := db.Collection("recharge-apis")
 
 	// Optionally, ensure indexes
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

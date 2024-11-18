@@ -161,26 +161,62 @@ func GetServiceDiscount(c echo.Context) error {
 	return c.JSON(http.StatusOK, serviceDiscounts)
 }
 
-// deleteServiceDiscount handles deleting a specific service discount.
+// DeleteServiceDiscount handles deleting a specific service discount.
 func DeleteServiceDiscount(c echo.Context) error {
+	// Log the start of the function
+	log.Println("INFO: Starting DeleteServiceDiscount handler")
+
+	// Retrieve query parameters
 	service := c.QueryParam("service")
 	server := c.QueryParam("server")
 
+	// Log the received parameters
+	log.Printf("INFO: Received parameters - service: %s, server: %s\n", service, server)
+
+	// Validate the input parameters
 	if service == "" || server == "" {
+		log.Println("ERROR: Missing required parameters - service or server")
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Service and server are required."})
 	}
-	db := c.Get("db").(*mongo.Database)
 
+	// Convert server to an integer
+	serverNumber, err := strconv.Atoi(server)
+	if err != nil {
+		log.Printf("ERROR: Server parameter is not a valid number: %s\n", server)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server must be a valid number."})
+	}
+
+	// Retrieve the database instance
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+
+	// Initialize the service discount collection
+	log.Println("INFO: Initializing service discount collection")
 	servicedDiscountCollection := models.InitializeServiceDiscountCollection(db)
-	filter := bson.M{"service": service, "server": server}
+
+	// Define the filter for the document to delete
+	filter := bson.M{"service": service, "server": serverNumber}
+	log.Printf("DEBUG: Filter being used for deletion: %+v\n", filter)
+
+	// Perform the delete operation
 	result, err := servicedDiscountCollection.DeleteOne(context.TODO(), filter)
 	if err != nil {
+		log.Println("ERROR: Failed to delete service discount:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete service discount."})
 	}
 
+	// Check if a document was deleted
 	if result.DeletedCount == 0 {
+		log.Println("INFO: No document found to delete with the given filter")
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "Service discount not found."})
 	}
 
+	// Log the successful deletion
+	log.Printf("INFO: Successfully deleted document. Deleted count: %d\n", result.DeletedCount)
+
+	// Return success response
 	return c.JSON(http.StatusOK, map[string]string{"message": "Service discount deleted successfully."})
 }

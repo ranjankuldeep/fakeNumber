@@ -7,10 +7,10 @@ import (
 
 // RegisterServerDiscountRoutes sets up routes for server discounts.
 func RegisterServerDiscountRoutes(e *echo.Echo) {
-	serverGroup := e.Group("/server")
+	serverGroup := e.Group("/api/server/")
 
 	// Define routes and link them to handler functions
-	serverGroup.POST("/add-discount", handlers.AddDiscount)
-	serverGroup.GET("/get-discount", handlers.GetDiscount)
-	serverGroup.DELETE("/delete-discount", handlers.DeleteDiscount)
+	serverGroup.POST("add-discount", handlers.AddDiscount)
+	serverGroup.GET("get-discount", handlers.GetDiscount)
+	serverGroup.DELETE("delete-discount", handlers.DeleteDiscount)
 }

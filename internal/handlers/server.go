@@ -103,24 +103,62 @@ func DeleteServer(c echo.Context) error {
 
 // Update maintenance status for a server
 func MaintainanceServer(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
-	serverCollection := db.Collection("server")
+	// Log the start of the function
+	log.Println("INFO: Starting MaintainanceServer handler")
 
-	server, err := strconv.Atoi(c.FormValue("server"))
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server is required and must be an integer."})
+	// Retrieve the database instance
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
-	maintainance, err := strconv.ParseBool(c.FormValue("maintainance"))
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Maintenance must be a boolean."})
+	log.Println("INFO: Database instance retrieved successfully")
+
+	// Define a struct to parse the JSON input
+	type RequestBody struct {
+		Server       int  `json:"server"`
+		Maintainance bool `json:"maintainance"`
 	}
 
-	filter := bson.M{"server": server}
-	update := bson.M{"$set": bson.M{"maintainance": maintainance}}
+	var input RequestBody
+
+	// Bind the JSON input to the struct
+	log.Println("INFO: Binding JSON input from request body")
+	if err := c.Bind(&input); err != nil {
+		log.Println("ERROR: Failed to bind JSON input:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input format"})
+	}
+
+	// Log the received input
+	log.Printf("INFO: Received input - server: %d, maintainance: %t\n", input.Server, input.Maintainance)
+
+	// Validate input
+	if input.Server == 0 {
+		log.Println("ERROR: Server number is required and must be greater than 0")
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server is required and must be greater than 0"})
+	}
+
+	// Initialize the collection and define the filter and update
+	serverCollection := db.Collection("servers")
+	filter := bson.M{"server": input.Server}
+	update := bson.M{"$set": bson.M{"maintainance": input.Maintainance}}
+
+	// Log the update operation
+	log.Printf("INFO: Updating document in 'server' collection with filter: %+v and update: %+v\n", filter, update)
 	result, err := serverCollection.UpdateOne(context.Background(), filter, update)
-	if err != nil || result.MatchedCount == 0 {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error or server not found"})
+	if err != nil {
+		log.Println("ERROR: Failed to update maintenance status:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
+
+	// Check if the update operation matched any document
+	if result.MatchedCount == 0 {
+		log.Printf("INFO: No matching document found for filter: %+v\n", filter)
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Server not found"})
+	}
+
+	// Log the successful update
+	log.Printf("INFO: Maintenance status updated successfully for server: %d\n", input.Server)
 	return c.JSON(http.StatusOK, map[string]string{"message": "Maintenance status updated successfully"})
 }
 

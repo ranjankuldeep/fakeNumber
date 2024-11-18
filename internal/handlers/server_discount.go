@@ -14,28 +14,66 @@ import (
 )
 
 func AddDiscount(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
-	server, err := strconv.Atoi(c.FormValue("server"))
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server number is required and must be an integer."})
+	// Log: Start of the function
+	log.Println("INFO: Starting AddDiscount handler")
+
+	// Retrieve the database instance
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+	log.Println("INFO: Database instance retrieved successfully")
+
+	// Define a struct to parse the JSON input
+	type RequestBody struct {
+		Server   string  `json:"server"`
+		Discount float64 `json:"discount"`
 	}
 
-	discount, err := strconv.ParseFloat(c.FormValue("discount"), 64)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Discount must be a valid number."})
+	var input RequestBody
+
+	// Bind the JSON input to the struct
+	if err := c.Bind(&input); err != nil {
+		log.Println("ERROR: Failed to bind JSON input:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input format"})
 	}
 
-	serverDiscountCol := db.Collection("server_discount")
+	// Convert `server` to an integer
+	server, err := strconv.Atoi(input.Server)
+	if err != nil {
+		log.Println("ERROR: Server number must be an integer:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server number must be an integer"})
+	}
+
+	// Log received parameters
+	log.Printf("INFO: Received parameters - server: %d, discount: %.2f\n", server, input.Discount)
+
+	// Validate input
+	if server <= 0 {
+		log.Println("ERROR: Server number is required and must be greater than 0")
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server number is required and must be greater than 0"})
+	}
+	if input.Discount < 0 {
+		log.Println("ERROR: Discount must be a non-negative number")
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Discount must be a non-negative number"})
+	}
+
+	// Initialize collection and set up filter, update, and options
+	serverDiscountCol := db.Collection("server-discounts")
 	filter := bson.M{"server": server}
-	update := bson.M{"$set": bson.M{"server": server, "discount": discount}}
+	update := bson.M{"$set": bson.M{"server": server, "discount": input.Discount}}
 	opts := options.Update().SetUpsert(true)
 
+	// Perform the update operation
 	_, err = serverDiscountCol.UpdateOne(context.Background(), filter, update, opts)
 	if err != nil {
-		log.Println("Error updating discount:", err)
+		log.Println("ERROR: Failed to add or update discount:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal Server Error"})
 	}
 
+	// Log success
+	log.Println("INFO: Discount added or updated successfully")
 	return c.JSON(http.StatusOK, map[string]string{"message": "Discount added or updated successfully"})
 }
 
@@ -56,8 +94,8 @@ func GetDiscount(c echo.Context) error {
 	var serverDiscounts []models.ServerDiscount
 
 	// Log: Querying the database
-	log.Println("INFO: Fetching discounts from the 'server_discount' collection")
-	cursor, err := db.Collection("server_discount").Find(context.Background(), bson.M{})
+	log.Println("INFO: Fetching discounts from the 'server-discount' collection")
+	cursor, err := db.Collection("server-discounts").Find(context.Background(), bson.M{})
 	if err != nil {
 		log.Println("ERROR: Error fetching discounts from database:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error fetching discounts"})
@@ -70,11 +108,17 @@ func GetDiscount(c echo.Context) error {
 		}
 	}()
 
-	// Log: Parsing the data
+	// Log: Decoding fetched data
 	log.Println("INFO: Decoding fetched discounts")
 	if err = cursor.All(context.Background(), &serverDiscounts); err != nil {
 		log.Println("ERROR: Error decoding discounts:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error parsing discounts"})
+	}
+
+	// Handle case when no discounts are found
+	if len(serverDiscounts) == 0 {
+		log.Println("INFO: No discounts found in the 'server_discount' collection")
+		return c.JSON(http.StatusOK, []models.ServerDiscount{})
 	}
 
 	// Log: Successfully fetched discounts
@@ -98,7 +142,7 @@ func DeleteDiscount(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server number must be an integer."})
 	}
 
-	result, err := db.Collection("server_discount").DeleteOne(context.Background(), bson.M{"server": server})
+	result, err := db.Collection("server-discounts").DeleteOne(context.Background(), bson.M{"server": server})
 	if err != nil {
 		log.Println("Error deleting discount:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})

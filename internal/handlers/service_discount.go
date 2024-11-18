@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
@@ -16,55 +19,79 @@ import (
 // addServiceDiscount handles adding or updating a service discount.
 func AddServiceDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
+
 	// Define a struct to map the expected request body
 	type RequestBody struct {
-		Service  string  `json:"service"`  // JSON field name
-		Server   string  `json:"server"`   // JSON field name
-		Discount float64 `json:"discount"` // JSON field name
+		Service  string  `json:"service"`
+		Server   string  `json:"server"`
+		Discount float64 `json:"discount"`
 	}
 
-	// Initialize an instance of the struct
+	// Log the incoming request for debugging
+	body := new(bytes.Buffer)
+	body.ReadFrom(c.Request().Body)
+	log.Printf("INFO: Incoming request body: %s\n", body.String())
+
+	// Bind the request body
 	var input RequestBody
-	if err := c.Bind(input); err != nil {
+	if err := json.NewDecoder(strings.NewReader(body.String())).Decode(&input); err != nil {
+		log.Println("ERROR: Failed to parse request body:", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
 	}
-	serverNumber, _ := strconv.Atoi(input.Server)
 
+	// Validate input
 	if input.Service == "" || input.Server == "" {
+		log.Println("ERROR: Missing service or server in the input")
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Service and server are required."})
 	}
 
+	// Parse server number
+	serverNumber, err := strconv.Atoi(input.Server)
+	if err != nil {
+		log.Println("ERROR: Invalid server number:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server must be a valid number."})
+	}
+
+	// Parse and validate discount
 	discount, err := strconv.ParseFloat(fmt.Sprintf("%v", input.Discount), 64)
 	if err != nil || discount < 0 {
+		log.Println("ERROR: Invalid discount value:", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Discount must be a valid number."})
 	}
 
-	// Check if the service discount exists
-	filter := bson.M{"service": input.Service, "server": input.Server}
+	// Initialize collection
 	servicedDiscountCollection := models.InitializeServiceDiscountCollection(db)
+
+	// Check if the service discount exists
+	filter := bson.M{"service": input.Service, "server": serverNumber}
 	var existingService models.ServiceDiscount
 	err = servicedDiscountCollection.FindOne(context.TODO(), filter).Decode(&existingService)
 
 	if err == mongo.ErrNoDocuments {
 		// Add new discount
+		log.Println("INFO: Adding new service discount")
 		_, err = servicedDiscountCollection.InsertOne(context.TODO(), models.ServiceDiscount{
 			Service:  input.Service,
 			Server:   serverNumber,
 			Discount: discount,
 		})
 		if err != nil {
+			log.Println("ERROR: Failed to add service discount:", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to add service discount."})
 		}
 		return c.JSON(http.StatusCreated, map[string]string{"message": "Discount added successfully."})
 	} else if err == nil {
 		// Update existing discount
+		log.Println("INFO: Updating existing service discount")
 		update := bson.M{"$set": bson.M{"discount": discount}}
 		_, err = servicedDiscountCollection.UpdateOne(context.TODO(), filter, update)
 		if err != nil {
+			log.Println("ERROR: Failed to update service discount:", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update service discount."})
 		}
 		return c.JSON(http.StatusOK, map[string]string{"message": "Discount updated successfully."})
 	} else {
+		log.Println("ERROR: Unexpected error while processing service discount:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error."})
 	}
 }

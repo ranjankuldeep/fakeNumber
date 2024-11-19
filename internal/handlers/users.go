@@ -1162,7 +1162,6 @@ func VerifyOTP(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	userCol := models.InitializeUserCollection(db)
 	otpCol := db.Collection("otp")
-	// apiWalletCol := models.InitializeApiWalletuserCollection(db)
 
 	type RequestBody struct {
 		Email    string `json:"email"`
@@ -1197,12 +1196,14 @@ func VerifyOTP(c echo.Context) error {
 	}
 
 	// Validate the OTP
-	hashedOTP := otpDoc["otp"].(string)
-	if err := bcrypt.CompareHashAndPassword([]byte(hashedOTP), []byte(body.OTP)); err != nil {
+	storedHashedOTP := otpDoc["otp"].(string) // OTP hash stored in the database
+	inputHashedOTP := hashOTP(body.OTP)       // Hash the provided OTP using the same function
+	if storedHashedOTP != inputHashedOTP {
+		log.Printf("ERROR: Invalid OTP provided. Provided Hash: %s, Stored Hash: %s\n", inputHashedOTP, storedHashedOTP)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid OTP"})
 	}
 
-	// Delete the OTP document
+	// Delete the OTP document after validation
 	_, err = otpCol.DeleteOne(ctx, bson.M{"email": body.Email})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to delete OTP"})
@@ -1227,35 +1228,6 @@ func VerifyOTP(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to register user"})
 	}
-
-	// Generate API key
-	apiKeyBytes := make([]byte, 16)
-	if _, err := rand.Read(apiKeyBytes); err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate API key"})
-	}
-	// apiKey := hex.EncodeToString(apiKeyBytes)
-
-	// // Generate TRON wallet
-	// wallet, err := lib.GenerateTronAddress()
-	// if err != nil {
-	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate TRON wallet"})
-	// }
-	// trxAddress := wallet["address"]
-	// trxPrivateKey := wallet["privateKey"]
-
-	// // Create API wallet user
-	// apiWallet := models.ApiWalletUser{
-	// 	UserID:        newUser.ID,
-	// 	APIKey:        apiKey,
-	// 	Balance:       0,
-	// 	TRXAddress:    trxAddress,
-	// 	TRXPrivateKey: trxPrivateKey,
-	// }
-
-	// _, err = apiWalletCol.InsertOne(ctx, apiWallet)
-	// if err != nil {
-	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create API wallet"})
-	// }
 
 	return c.JSON(http.StatusOK, echo.Map{
 		"status":  "VERIFIED",

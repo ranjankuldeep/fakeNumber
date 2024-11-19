@@ -15,7 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
-	"github.com/ranjankuldeep/fakeNumber/internal/lib"
+	"github.com/ranjankuldeep/fakeNumber/internal/database/services"
 	serverscalc "github.com/ranjankuldeep/fakeNumber/internal/serversCalc"
 	serversotpcalc "github.com/ranjankuldeep/fakeNumber/internal/serversOtpCalc"
 	"github.com/ranjankuldeep/fakeNumber/logs"
@@ -25,11 +25,6 @@ import (
 )
 
 type ApiRequest struct {
-	URL     string
-	Headers map[string]string
-}
-
-type OTPRequest struct {
 	URL     string
 	Headers map[string]string
 }
@@ -740,6 +735,55 @@ func HandleCheckOTP(c echo.Context) error {
 }
 
 func HandleNumberCancel(c echo.Context) error {
+	ctx := context.Background()
+	id := c.QueryParam("id")
+	apiKey := c.QueryParam("api_key")
+	server := c.QueryParam("server")
+
+	if id == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
+	}
+	if apiKey == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_APIKEY"})
+	}
+	if server == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
+	}
+	db := c.Get("db").(*mongo.Database)
+
+	var apiWalletUser models.ApiWalletUser
+	apiWalletColl := models.InitializeApiWalletuserCollection(db)
+
+	err := apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	if err != nil || err == mongo.ErrEmptySlice {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
+	}
+
+	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	// construct api url and headers
+	constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
+	}
+
+	validOtp, err := fetchOTP(server, id, constructedOTPRequest)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// Save transaction history logic here...
+	// Process the transaction here
+
+	// Respond with the extracted OTP
+	return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
 	return nil
 }
 
@@ -794,7 +838,7 @@ func processTransaction(collection *mongo.Collection, validOtp, id, server, user
 		}
 
 		// Send OTP details
-		err := lib.OtpGetDetails(
+		err := services.OtpGetDetails(
 			userEmail,
 			transaction.Service,
 			transaction.Price,
@@ -830,7 +874,7 @@ func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, 
 	return serverData, nil
 }
 
-func fetchOTP(server, id string, otpRequest OTPRequest) (string, error) {
+func fetchOTP(server, id string, otpRequest ApiRequest) (string, error) {
 	otpData := OTPData{}
 	switch server {
 	case "1", "3", "4", "5", "6", "7", "8", "10":
@@ -868,67 +912,67 @@ func fetchOTP(server, id string, otpRequest OTPRequest) (string, error) {
 	return otpData.Code, nil
 }
 
-func constructOtpUrl(server, apiKeyServer, token, id string) (OTPRequest, error) {
+func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error) {
 	var request ApiRequest
-	request.Headers = make(map[string]string)
+	request.Headers = map[string]string{}
 
 	switch server {
 	case "1":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "2":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://5sim.net/v1/user/check/%s", id),
 			Headers: map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token), "Accept": "application/json"},
 		}, nil
 	case "3":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "4":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "5":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "6":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "7":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "8":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "9":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/sweetWrapper?token=%s&serialNumber=%s", token, id),
 			Headers: map[string]string{},
 		}, nil
 	case "10":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "11":
-		return OTPRequest{
+		return ApiRequest{
 			URL:     fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	default:
-		return OTPRequest{}, fmt.Errorf("INVLAID_SERVER_CHOICE")
+		return ApiRequest{}, fmt.Errorf("INVLAID_SERVER_CHOICE")
 	}
 }

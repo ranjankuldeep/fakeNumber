@@ -833,13 +833,35 @@ func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, 
 func fetchOTP(server, id string, otpRequest OTPRequest) (string, error) {
 	otpData := OTPData{}
 	switch server {
-	case "1":
+	case "1", "3", "4", "5", "6", "7", "8", "10":
 		otp, err := serversotpcalc.GetOTPServer1(otpRequest.URL, otpRequest.Headers, id)
 		if err != nil {
 			logs.Logger.Error(err)
 			return "", err
 		}
 		otpData.Code = otp
+	case "2":
+		otp, err := serversotpcalc.GetSMSTextsServer2(otpRequest.URL, id, otpRequest.Headers)
+		if err != nil {
+			logs.Logger.Error(err)
+			return "", err
+		}
+		otpData.Code = otp
+	case "9":
+		otp, err := serversotpcalc.GetSMSTextsServer2(otpRequest.URL, id, otpRequest.Headers)
+		if err != nil {
+			logs.Logger.Error(err)
+			return "", err
+		}
+		otpData.Code = otp
+	case "11":
+		otp, err := serversotpcalc.GetOTPServer11(otpRequest.URL, id)
+		if err != nil {
+			logs.Logger.Error(err)
+			return "", err
+		}
+		otpData.Code = otp
+
 	default:
 		return "", fmt.Errorf("INVALID_SERVER_CHOICE")
 	}

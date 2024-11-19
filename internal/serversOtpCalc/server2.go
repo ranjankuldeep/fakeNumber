@@ -28,14 +28,17 @@ type OTPResponse struct {
 	Country   string `json:"country"`
 }
 
-func GetSMSTexts(otpURL string, id string, token string) (string, error) {
+func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (string, error) {
 	req, err := http.NewRequest("GET", otpURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Add("Accept", "application/json")
+	if len(headers) > 0 {
+		for key, value := range headers {
+			req.Header.Add(key, value)
+		}
+	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)

@@ -311,7 +311,6 @@ func FetchDiscount(ctx context.Context, db *mongo.Database, userId, sname string
 		totalDiscount += round(serviceDiscount.Discount, 2)
 	}
 
-	// Server discount
 	serverDiscountCollection := models.InitializeServerDiscountCollection(db)
 	var serverDiscount models.ServerDiscount
 	err = serverDiscountCollection.FindOne(ctx, bson.M{"server": server}).Decode(&serverDiscount)
@@ -321,12 +320,9 @@ func FetchDiscount(ctx context.Context, db *mongo.Database, userId, sname string
 	if err == nil {
 		totalDiscount += round(serverDiscount.Discount, 2)
 	}
-
-	// Return the total discount rounded to 2 decimal places
 	return round(totalDiscount, 2), nil
 }
 
-// Helper function to round to 2 decimal places
 func round(val float64, precision int) float64 {
 	format := fmt.Sprintf("%%.%df", precision)
 	valStr := fmt.Sprintf(format, val)
@@ -335,19 +331,16 @@ func round(val float64, precision int) float64 {
 }
 
 func formatDateTime() string {
-	// Format the current date and time
 	return time.Now().Format("01/02/2006T03:04:05 PM")
 }
 
 func removeHTMLTags(input string) string {
-	// Replace specific HTML tags
 	result := strings.ReplaceAll(input, "<br>", " ")
 	return result
 }
 
 func HandleGetOtp(c echo.Context) error {
 	ctx := context.Background()
-
 	id := c.QueryParam("id")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
@@ -388,37 +381,31 @@ func HandleGetOtp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
-	// construct api url and headers
 	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
 	}
-	logs.Logger.Info(constructedOTPRequest.URL)
 
 	validOtp, err := fetchOTP(server, id, constructedOTPRequest)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	logs.Logger.Info(validOtp)
-
-	// Check if existing entry with id and otp exists
 	var existingEntry models.TransactionHistory
 	transactionCollection := models.InitializeTransactionHistoryCollection(db)
 
 	err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
 	if err == mongo.ErrNoDocuments {
+		logs.Logger.Info("i am printing continoulsy")
 		formattedDateTime := formatDateTime()
 
-		// Find the corresponding transaction history entry
 		var transaction models.TransactionHistory
 		err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
 		if err != nil {
-			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 
-		// Create a new transactionHistory instance
 		numberHistory := models.TransactionHistory{
 			ID:            primitive.NewObjectID(),
 			UserID:        apiWalletUser.UserID.Hex(),
@@ -434,7 +421,6 @@ func HandleGetOtp(c echo.Context) error {
 
 		_, err = transactionCollection.InsertOne(ctx, numberHistory)
 		if err != nil {
-			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 
@@ -445,7 +431,6 @@ func HandleGetOtp(c echo.Context) error {
 		}
 		formattedIpDetails := removeHTMLTags(ipDetails)
 
-		// Send OTP details
 		otpDetail := services.OTPDetails{
 			Email:       userData.Email,
 			ServiceName: transaction.Service,
@@ -458,7 +443,6 @@ func HandleGetOtp(c echo.Context) error {
 		err = services.OtpGetDetails(otpDetail)
 		if err != nil {
 			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
@@ -663,28 +647,24 @@ func fetchOTP(server, id string, otpRequest ApiRequest) (string, error) {
 	case "1", "3", "4", "5", "6", "7", "8", "10":
 		otp, err := serversotpcalc.GetOTPServer1(otpRequest.URL, otpRequest.Headers, id)
 		if err != nil {
-			logs.Logger.Error(err)
 			return "", err
 		}
 		otpData.Code = otp
 	case "2":
 		otp, err := serversotpcalc.GetSMSTextsServer2(otpRequest.URL, id, otpRequest.Headers)
 		if err != nil {
-			logs.Logger.Error(err)
 			return "", err
 		}
 		otpData.Code = otp
 	case "9":
 		otp, err := serversotpcalc.FetchTokenAndOTP(otpRequest.URL, id, otpRequest.Headers)
 		if err != nil {
-			logs.Logger.Error(err)
 			return "", err
 		}
 		otpData.Code = otp
 	case "11":
 		otp, err := serversotpcalc.GetOTPServer11(otpRequest.URL, id)
 		if err != nil {
-			logs.Logger.Error(err)
 			return "", err
 		}
 		otpData.Code = otp
@@ -800,6 +780,7 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 }
 
 func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error) {
+	logs.Logger.Info(token)
 	var request ApiRequest
 	request.Headers = map[string]string{}
 

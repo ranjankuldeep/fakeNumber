@@ -1,15 +1,17 @@
 package serversotpcalc
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 // GetOTPServer1 fetches the OTP status from the given URL
 func GetOTPServer1(otpUrl string, headers map[string]string, id string) (string, error) {
+	logs.Logger.Info(otpUrl)
 	req, err := http.NewRequest("GET", otpUrl, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -43,9 +45,9 @@ func GetOTPServer1(otpUrl string, headers map[string]string, id string) (string,
 
 	switch responseText {
 	case "STATUS_WAIT_CODE":
-		return "", errors.New("WAIT_FOR_SMS_CODE")
+		return "STATUS_WAIT_CODE", nil
 	case "STATUS_CANCEL":
-		return "", errors.New("NUMBER_CANCELED")
+		return "STATUS_CANCEL", nil
 	default:
 		return "", fmt.Errorf("unexpected response: %s", responseText)
 	}

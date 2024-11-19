@@ -46,7 +46,6 @@ func ExtractNumberServer2(url string, headers map[string]string) (string, string
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		// Handle specific errors
 		if strings.Contains(string(body), "no free phones") {
 			return "", "", errors.New("no number available: no free phones")
 		}
@@ -58,9 +57,9 @@ func ExtractNumberServer2(url string, headers map[string]string) (string, string
 
 	var response Response
 	if err := json.Unmarshal(body, &response); err != nil {
+		logs.Logger.Error(err)
 		return "", "", err
 	}
-	logs.Logger.Info(response)
 	phone := strings.TrimPrefix(response.Phone, "+91")
 
 	// Return the ID and Phone

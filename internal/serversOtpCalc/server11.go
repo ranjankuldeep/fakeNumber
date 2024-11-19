@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
-// OTPResponse represents the response for the OTP API
 type OTPServer11Response struct {
 	RequestID     string `json:"request_id"`
 	ApplicationID int    `json:"application_id"`
@@ -20,6 +21,7 @@ type OTPServer11Response struct {
 }
 
 func GetOTPServer11(otpURL string, requestID string) (string, error) {
+	logs.Logger.Info(otpURL)
 	resp, err := http.Get(otpURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch OTP: %w", err)
@@ -41,15 +43,14 @@ func GetOTPServer11(otpURL string, requestID string) (string, error) {
 	}
 
 	if otpResp.ErrorCode == "wait_sms" {
-		return "", errors.New(otpResp.ErrorMsg)
+		return "wait_sms", nil
 	}
 
 	if otpResp.ErrorCode == "wrong_status" {
-		return "", errors.New(otpResp.ErrorMsg)
+		return "", errors.New("wrong_status")
 	}
-
 	if otpResp.SMSCode != "" {
 		return otpResp.SMSCode, nil
 	}
-	return "", errors.New("unexpected response: no OTP found and not waiting")
+	return "", errors.New("Unexpected Response: No OTP Found and Not Waiting")
 }

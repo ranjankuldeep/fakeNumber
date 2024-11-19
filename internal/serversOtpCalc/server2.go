@@ -2,7 +2,6 @@ package serversotpcalc
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -31,6 +30,7 @@ type OTPResponse struct {
 }
 
 func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (string, error) {
+	logs.Logger.Info(otpURL)
 	req, err := http.NewRequest("GET", otpURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -71,7 +71,7 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (st
 	}
 
 	if len(smsTexts) == 0 {
-		return "", errors.New("no SMS texts found in the response")
+		return "NO_SMS_FOUND", nil
 	}
 	return smsTexts[0], nil
 }

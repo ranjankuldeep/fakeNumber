@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 // TokenResponse represents the response for the token API
@@ -32,6 +34,7 @@ type OTPServer9Response struct {
 
 // FetchTokenAndOTP fetches the token and then fetches the OTP using the token
 func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) (string, error) {
+	logs.Logger.Info(otpURL)
 	req, err := http.NewRequest("GET", otpURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create OTP request: %w", err)
@@ -64,17 +67,18 @@ func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) (s
 		return "", fmt.Errorf("failed to parse OTP response: %w", err)
 	}
 
-	if otpResponse.Code == "210" {
-		return "", errors.New(otpResponse.Message)
-	}
 	if otpResponse.Code != "200" {
+		return "", errors.New(otpResponse.Message)
+	} else if otpResponse.Code == "210" {
 		return "", errors.New(otpResponse.Message)
 	}
 
 	for _, vc := range otpResponse.Data.VerificationCode {
 		if vc.Vc != "" {
 			return vc.Vc, nil
+		} else if vc.Vc == "" {
+			return "NO_OTP_RECEIVED_YET", nil
 		}
 	}
-	return "", errors.New("no OTP found in the response")
+	return "", errors.New("NO_OTP_FOUND")
 }

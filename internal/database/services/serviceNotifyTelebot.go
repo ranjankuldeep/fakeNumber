@@ -42,9 +42,8 @@ func sendMessage(chatID, token, message string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP error! status: %d", resp.StatusCode)
+		return fmt.Errorf("HTTP error! status: %d in sending message through TeleBot", resp.StatusCode)
 	}
-
 	return nil
 }
 
@@ -66,7 +65,6 @@ func NumberGetDetails(numberInfo NumberDetails) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -87,7 +85,6 @@ func OtpGetDetails(otpInfo OTPDetails) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -109,6 +106,5 @@ func NumberCancelDetails(email, serviceName, price, server string, number int64,
 	if err != nil {
 		return err
 	}
-
 	return nil
 }

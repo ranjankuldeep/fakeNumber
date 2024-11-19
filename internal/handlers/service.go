@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	serverscalc "github.com/ranjankuldeep/fakeNumber/internal/serversCalc"
+	serversotpcalc "github.com/ranjankuldeep/fakeNumber/internal/serversOtpCalc"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -29,7 +29,11 @@ type ApiRequest struct {
 	Headers map[string]string
 }
 
-// ResponseData struct to hold parsed data
+type OTPRequest struct {
+	URL     string
+	Headers map[string]string
+}
+
 type ResponseData struct {
 	ID     string
 	Number string
@@ -37,6 +41,10 @@ type ResponseData struct {
 type NumberData struct {
 	Id     string
 	Number string
+}
+
+type OTPData struct {
+	Code string
 }
 
 var numData NumberData
@@ -582,13 +590,13 @@ func HandleGetOtp(c echo.Context) error {
 	}
 
 	// construct api url and headers
-	constructedRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
+	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid server or maintenance issue"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
 	}
 
-	validOtp, err := fetchOTP(constructedRequest.URL, server, constructedRequest.Headers)
+	validOtp, err := fetchOTP(server, id, constructedOTPRequest)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch API response"})
@@ -822,113 +830,83 @@ func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, 
 	return serverData, nil
 }
 
-func fetchOTP(apiUrl, server string, headers map[string]string) (string, error) {
-	req, err := http.NewRequest("GET", apiUrl, nil)
-	if err != nil {
-		return "", err
+func fetchOTP(server, id string, otpRequest OTPRequest) (string, error) {
+	otpData := OTPData{}
+	switch server {
+	case "1":
+		otp, err := serversotpcalc.GetOTPServer1(otpRequest.URL, otpRequest.Headers, id)
+		if err != nil {
+			logs.Logger.Error(err)
+			return "", err
+		}
+		otpData.Code = otp
+	default:
+		return "", fmt.Errorf("INVALID_SERVER_CHOICE")
 	}
-
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	responseData := string(body)
-	validOtp, parseErr := parseResponse(server, responseData)
-	if parseErr != nil {
-		return "", fmt.Errorf("failed to parse response: %w", parseErr)
-	}
-
-	return validOtp, nil
+	return otpData.Code, nil
 }
 
-func parseResponse(server string, responseData string) (string, error) {
-	// Try to handle JSON response first
-	var jsonData map[string]interface{}
-	err := json.Unmarshal([]byte(responseData), &jsonData)
-	if err == nil {
-		// JSON parsing succeeded
-		switch server {
-		case "2":
-			if smsList, ok := jsonData["sms"].([]interface{}); ok && len(smsList) > 0 {
-				// Assume each SMS has a "text" and "date" field
-				latestSms := smsList[0].(map[string]interface{})
-				if text, ok := latestSms["text"].(string); ok {
-					return text, nil
-				}
-			}
-		case "7", "8":
-			if smsCode, ok := jsonData["sms_code"].(string); ok {
-				return smsCode, nil
-			}
-		case "9":
-			if data, ok := jsonData["data"].(map[string]interface{}); ok {
-				if vcList, ok := data["verificationCode"].([]interface{}); ok && len(vcList) > 0 {
-					if vc, ok := vcList[0].(map[string]interface{}); ok {
-						if code, ok := vc["vc"].(string); ok {
-							return code, nil
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Handle string responses if JSON parsing fails
-	if strings.HasPrefix(responseData, "STATUS_OK") {
-		parts := strings.Split(responseData, ":")
-		if len(parts) > 1 {
-			return strings.TrimSpace(parts[1]), nil
-		}
-	}
-
-	return "", errors.New("unknown response format")
-}
-
-func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error) {
+func constructOtpUrl(server, apiKeyServer, token, id string) (OTPRequest, error) {
 	var request ApiRequest
 	request.Headers = make(map[string]string)
 
 	switch server {
 	case "1":
-		request.URL = fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "2":
-		request.URL = fmt.Sprintf("https://5sim.net/v1/user/check/%s", id)
-		request.Headers["Authorization"] = fmt.Sprintf("Bearer %s", apiKeyServer)
-		request.Headers["Accept"] = "application/json"
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://5sim.net/v1/user/check/%s", id),
+			Headers: map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token), "Accept": "application/json"},
+		}, nil
 	case "3":
-		request.URL = fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "4":
-		request.URL = fmt.Sprintf("https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "5":
-		request.URL = fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "6":
-		request.URL = fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "7":
-		request.URL = fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "8":
-		request.URL = fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "9":
-		request.URL = fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/sweetWrapper?token=%s&serialNumber=%s", token, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/sweetWrapper?token=%s&serialNumber=%s", token, id),
+			Headers: map[string]string{},
+		}, nil
 	case "10":
-		request.URL = fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getStatus&id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
 	case "11":
-		request.URL = fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id)
+		return OTPRequest{
+			URL:     fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	default:
+		return OTPRequest{}, fmt.Errorf("INVLAID_SERVER_CHOICE")
 	}
-	return request, nil
 }

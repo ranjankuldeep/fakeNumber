@@ -599,7 +599,7 @@ func HandleGetOtp(c echo.Context) error {
 	validOtp, err := fetchOTP(server, id, constructedOTPRequest)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch API response"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	// Save transaction history logic here...
@@ -848,7 +848,7 @@ func fetchOTP(server, id string, otpRequest OTPRequest) (string, error) {
 		}
 		otpData.Code = otp
 	case "9":
-		otp, err := serversotpcalc.GetSMSTextsServer2(otpRequest.URL, id, otpRequest.Headers)
+		otp, err := serversotpcalc.FetchTokenAndOTP(otpRequest.URL, id)
 		if err != nil {
 			logs.Logger.Error(err)
 			return "", err

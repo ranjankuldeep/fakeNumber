@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
+	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
 )
 
@@ -70,6 +72,19 @@ func main() {
 
 	// Select the specific database
 	db := client.Database("Express-Backend")
+
+	// Run periodically token update of server9
+	go func() {
+		for {
+			log.Println("Running server token update task...")
+			err := lib.UpdateServerToken(db)
+			if err != nil {
+				log.Printf("Error during token update: %v", err)
+			}
+			log.Println("Server token update task completed.")
+			time.Sleep(2 * time.Hour) // Wait for 2 hours before running again
+		}
+	}()
 
 	// Middleware to set the DB in the context
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {

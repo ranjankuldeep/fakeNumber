@@ -19,7 +19,6 @@ type OTPServer11Response struct {
 	SMSCode       string `json:"sms_code,omitempty"`   // For OTP case
 }
 
-// GetOTP fetches the OTP from the API
 func GetOTPServer11(otpURL string, requestID string) (string, error) {
 	resp, err := http.Get(otpURL)
 	if err != nil {

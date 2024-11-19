@@ -47,7 +47,6 @@ var numData NumberData
 func HandleGetNumberRequest(c echo.Context) error {
 	ctx := context.TODO()
 	db := c.Get("db").(*mongo.Database)
-	logs.Logger.Info("reached")
 
 	// Get query parameters
 	serverDataCode := c.QueryParam("code")
@@ -123,7 +122,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 			}
 		}
 	}
-	logs.Logger.Info("token ", serverInfo.Token)
 	// fetch id and numbers
 	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData)
 	if err != nil {
@@ -202,7 +200,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	case "9":
 		// Single OTP server
 		// Done
-		number, id, err := serverscalc.ExtractNumberServer9()
+		number, id, err := serverscalc.ExtractNumberServer9(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -400,7 +398,6 @@ func HandleGetOtp(c echo.Context) error {
 
 	validOtp, err := fetchOTP(server, id, constructedOTPRequest)
 	if err != nil {
-		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	logs.Logger.Info(validOtp)

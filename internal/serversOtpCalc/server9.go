@@ -32,7 +32,6 @@ type OTPServer9Response struct {
 
 // FetchTokenAndOTP fetches the token and then fetches the OTP using the token
 func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) (string, error) {
-	// Step 2: Fetch OTP using the token
 	req, err := http.NewRequest("GET", otpURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create OTP request: %w", err)
@@ -65,8 +64,11 @@ func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) (s
 		return "", fmt.Errorf("failed to parse OTP response: %w", err)
 	}
 
+	if otpResponse.Code == "210" {
+		return "", errors.New(otpResponse.Message)
+	}
 	if otpResponse.Code != "200" {
-		return "", fmt.Errorf("failed to fetch OTP: %s", otpResponse.Message)
+		return "", errors.New(otpResponse.Message)
 	}
 
 	for _, vc := range otpResponse.Data.VerificationCode {

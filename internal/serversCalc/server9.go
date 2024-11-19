@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
 // TokenResponse represents the response structure for the token API.
@@ -34,45 +35,24 @@ type NumberResponse struct {
 	} `json:"data"`
 }
 
-// TODO REMOVE THE FETCHING LOGIC
-// FetchNumberWithToken fetches the token and uses it to fetch the number in one function.
-func ExtractNumberServer9() (string, string, error) {
-	tokenURL := "http://www.phantomunion.com:10023/pickCode-api/push/ticket?key=af725ae5a94b62313009148d6581c9cf"
-	// Step 1: Fetch Token
-	resp, err := http.Get(tokenURL)
+func ExtractNumberServer9(fullURL string, headers map[string]string) (string, string, error) {
+	req, err := http.NewRequest("GET", fullURL, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("error fetching token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", "", fmt.Errorf("error reading token response: %w", err)
+		return "", "", fmt.Errorf("error creating request: %w", err)
 	}
 
-	var tokenResponse TokenResponse
-	if err := json.Unmarshal(body, &tokenResponse); err != nil {
-		return "", "", fmt.Errorf("error parsing token response: %w", err)
+	for key, value := range headers {
+		req.Header.Add(key, value)
 	}
 
-	if tokenResponse.Code != "200" {
-		return "", "", errors.New(tokenResponse.Message)
-	}
-
-	token := tokenResponse.Data.Token
-	if token == "" {
-		return "", "", errors.New("no token received from API")
-	}
-
-	// Step 2: Fetch Number
-	fullURL := fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=10643&quantity=1&country=IN&effectiveTime=10", token)
-	resp, err = http.Get(fullURL)
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("error fetching number: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", "", fmt.Errorf("error reading number response: %w", err)
 	}
@@ -82,6 +62,9 @@ func ExtractNumberServer9() (string, string, error) {
 		return "", "", fmt.Errorf("error parsing number response: %w", err)
 	}
 
+	if numberResponse.Code == "221" {
+		return "", "", errors.New(numberResponse.Message)
+	}
 	if numberResponse.Code != "200" {
 		return "", "", errors.New(numberResponse.Message)
 	}
@@ -89,7 +72,7 @@ func ExtractNumberServer9() (string, string, error) {
 	if len(numberResponse.Data.PhoneNumber) == 0 {
 		return "", "", errors.New("no phone number found in response")
 	}
-
 	phoneData := numberResponse.Data.PhoneNumber[0]
-	return phoneData.SerialNumber, phoneData.Number, nil
+	phone := strings.TrimPrefix(phoneData.Number, "+91")
+	return phone, phoneData.SerialNumber, nil
 }

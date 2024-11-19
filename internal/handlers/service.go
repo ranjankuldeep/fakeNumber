@@ -599,11 +599,11 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
 	}
 
-	_, err = getServerDataWithMaintenanceCheck(ctx, db, server)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-	}
+	// _, err = getServerDataWithMaintenanceCheck(ctx, db, server)
+	// if err != nil {
+	// 	logs.Logger.Error(err)
+	// 	return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	// }
 
 	// // construct api url and headers
 	// constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id)
@@ -618,11 +618,12 @@ func HandleNumberCancel(c echo.Context) error {
 	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	// }
 
-	// Save transaction history logic here...
-	// Process the transaction here
+	// // Save transaction history logic here...
+	// // Process the transaction here
 
 	// Respond with the extracted OTP
 	// return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
+	// return nil
 	return nil
 }
 
@@ -780,10 +781,6 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 }
 
 func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error) {
-	logs.Logger.Info(token)
-	var request ApiRequest
-	request.Headers = map[string]string{}
-
 	switch server {
 	case "1":
 		return ApiRequest{
@@ -838,6 +835,68 @@ func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error)
 	case "11":
 		return ApiRequest{
 			URL:     fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	default:
+		return ApiRequest{}, fmt.Errorf("INVLAID_SERVER_CHOICE")
+	}
+}
+
+func constructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequest, error) {
+	switch server {
+	case "1":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=setStatus&id=%s&status=8", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "2":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://5sim.net/v1/user/cancel/%s", id),
+			Headers: map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token), "Accept": "application/json"},
+		}, nil
+	case "3":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "4":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "5":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "6":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "7":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "8":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "9":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://own5k.in/p/ccpay.php?type=cancel&number=%s", number),
+			Headers: map[string]string{},
+		}, nil
+	case "10":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=setStatus&id=%s&status=8", apiKeyServer, id),
+			Headers: map[string]string{},
+		}, nil
+	case "11":
+		return ApiRequest{
+			URL:     fmt.Sprintf("https://api2.sms-man.com/control/set-status?token=%s&request_id=%s&status=reject", token, id),
 			Headers: map[string]string{},
 		}, nil
 	default:

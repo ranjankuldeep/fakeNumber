@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
-	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -49,7 +48,6 @@ func fetchTokenFromAPI(apiKey string) (string, error) {
 
 func UpdateServerToken(db *mongo.Database) error {
 	serverCollection := models.InitializeServerCollection(db)
-
 	var server models.Server
 	err := serverCollection.FindOne(context.TODO(), bson.M{"server": 9}).Decode(&server)
 	if err != nil {
@@ -60,9 +58,8 @@ func UpdateServerToken(db *mongo.Database) error {
 		return fmt.Errorf("error finding server document: %w", err)
 	}
 
-	newToken, err := fetchTokenFromAPI(server.Token)
+	newToken, err := fetchTokenFromAPI(server.APIKey)
 	if err != nil {
-		log.Println("Error fetching token:", err)
 		return fmt.Errorf("error fetching token: %w", err)
 	}
 	update := bson.M{
@@ -77,6 +74,5 @@ func UpdateServerToken(db *mongo.Database) error {
 		log.Println("Error updating server document:", err)
 		return fmt.Errorf("error updating server document: %w", err)
 	}
-	logs.Logger.Info("server9 token updated succesfully")
 	return nil
 }

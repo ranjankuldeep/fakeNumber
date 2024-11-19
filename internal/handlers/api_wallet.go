@@ -232,7 +232,7 @@ func GetUpiQR(c echo.Context) error {
 
 	// Logger: Checking if QR code file exists
 	fmt.Println("INFO: Checking if QR code file exists")
-	filePath := filepath.Join("uploads", "upi-qr-code.png")
+	filePath := filepath.Join("./uploads", "upi-qr-code.png")
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		// Logger: QR code file not found

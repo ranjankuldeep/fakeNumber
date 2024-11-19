@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database/services"
 	serverscalc "github.com/ranjankuldeep/fakeNumber/internal/serversCalc"
 	serversotpcalc "github.com/ranjankuldeep/fakeNumber/internal/serversOtpCalc"
+	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -123,7 +123,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 			}
 		}
 	}
-
+	logs.Logger.Info("token ", serverInfo.Token)
 	// fetch id and numbers
 	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData)
 	if err != nil {
@@ -251,14 +251,15 @@ func HandleGetNumberRequest(c echo.Context) error {
 	// Save transaction history
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
 	transaction := models.TransactionHistory{
-		UserID:   apiWalletUser.UserID.Hex(),
-		Service:  serviceName,
-		Price:    fmt.Sprintf("%.2f", price),
-		Server:   server,
-		ID:       primitive.NewObjectID(),
-		Number:   numData.Number,
-		Status:   "FINISHED",
-		DateTime: time.Now().Format("2006-01-02T15:04:05"),
+		UserID:        apiWalletUser.UserID.Hex(),
+		Service:       serviceName,
+		TransactionID: numData.Id,
+		Price:         fmt.Sprintf("%.2f", price),
+		Server:        server,
+		ID:            primitive.NewObjectID(),
+		Number:        numData.Number,
+		Status:        "FINISHED",
+		DateTime:      time.Now().Format("2006-01-02T15:04:05"),
 	}
 	_, err = transactionHistoryCollection.InsertOne(ctx, transaction)
 	if err != nil {
@@ -282,6 +283,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save order."})
 	}
+	logs.Logger.Info(numData.Id, numData.Number)
 	return c.JSON(http.StatusOK, map[string]string{"id": numData.Id, "number": numData.Number})
 }
 
@@ -334,114 +336,15 @@ func round(val float64, precision int) float64 {
 	return result
 }
 
-// Helper function to handle response data
-func handleResponseData(server string, responseData string) (*ResponseData, error) {
-	switch server {
-	case "1", "3", "4", "5", "6":
-		parts := strings.Split(responseData, ":")
-		if len(parts) < 3 {
-			return nil, errors.New("invalid response format")
-		}
-		return &ResponseData{
-			ID:     parts[1],
-			Number: strings.TrimPrefix(parts[2], "91"),
-		}, nil
-
-	case "2", "7", "8":
-		var jsonResponse map[string]interface{}
-		if err := json.Unmarshal([]byte(responseData), &jsonResponse); err != nil {
-			return nil, fmt.Errorf("failed to parse JSON: %w", err)
-		}
-		id, ok := jsonResponse["id"].(string)
-		if !ok {
-			id, _ = jsonResponse["request_id"].(string)
-		}
-		number, ok := jsonResponse["phone"].(string)
-		if !ok {
-			number, _ = jsonResponse["number"].(string)
-		}
-		if id == "" || number == "" {
-			return nil, errors.New("missing fields in JSON response")
-		}
-		return &ResponseData{
-			ID:     id,
-			Number: strings.TrimPrefix(strings.Replace(number, "+91", "", 1), "91"),
-		}, nil
-
-	case "9":
-		var jsonResponse map[string]interface{}
-		if err := json.Unmarshal([]byte(responseData), &jsonResponse); err != nil {
-			return nil, fmt.Errorf("failed to parse JSON: %w", err)
-		}
-		phoneData, ok := jsonResponse["data"].(map[string]interface{})
-		if !ok {
-			return nil, errors.New("missing 'data' field in response")
-		}
-		phoneNumbers, ok := phoneData["phoneNumber"].([]interface{})
-		if !ok || len(phoneNumbers) == 0 {
-			return nil, errors.New("no phone numbers available")
-		}
-		firstPhone := phoneNumbers[0].(map[string]interface{})
-		id, _ := firstPhone["serialNumber"].(string)
-		number, _ := firstPhone["number"].(string)
-		return &ResponseData{
-			ID:     id,
-			Number: strings.TrimPrefix(number, "+91"),
-		}, nil
-
-	default:
-		return nil, errors.New("no numbers available. Please try different server")
-	}
+func formatDateTime() string {
+	// Format the current date and time
+	return time.Now().Format("01/02/2006T03:04:05 PM")
 }
 
-// Function to handle the retry logic
-func fetchNumber(server string, apiUrl string, headers map[string]string) (*ResponseData, error) {
-	client := &http.Client{}
-	var retry = true
-	var responseData string
-	var response *http.Response
-	var err error
-
-	for attempt := 0; attempt < 2 && retry; attempt++ {
-		// Handle request based on whether headers are needed
-		if len(headers) == 0 {
-			response, err = client.Get(apiUrl)
-		} else {
-			req, _ := http.NewRequest("GET", apiUrl, nil)
-			for key, value := range headers {
-				req.Header.Set(key, value)
-			}
-			response, err = client.Do(req)
-		}
-
-		if err != nil || response.StatusCode != http.StatusOK {
-			return nil, errors.New("no numbers available. Please try a different server")
-		}
-
-		// Read response body
-		buf := new(strings.Builder)
-		_, err = io.Copy(buf, response.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response: %w", err)
-		}
-		responseData = buf.String()
-
-		if responseData == "" {
-			return nil, errors.New("no numbers available. Please try a different server")
-		}
-
-		// Parse response data
-		data, err := handleResponseData(server, responseData)
-		if err == nil {
-			retry = false
-			return data, nil
-		} else {
-			if attempt == 1 {
-				return nil, errors.New("no numbers available. Please try different server")
-			}
-		}
-	}
-	return nil, errors.New("no numbers available after retries")
+func removeHTMLTags(input string) string {
+	// Replace specific HTML tags
+	result := strings.ReplaceAll(input, "<br>", " ")
+	return result
 }
 
 func HandleGetOtp(c echo.Context) error {
@@ -472,6 +375,15 @@ func HandleGetOtp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
 	}
 
+	var userData models.User
+	userCollection := models.InitializeUserCollection(db)
+
+	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&userData)
+	if err != nil || err == mongo.ErrEmptySlice {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
+	}
+
 	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
 	if err != nil {
 		logs.Logger.Error(err)
@@ -484,23 +396,75 @@ func HandleGetOtp(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
 	}
+	logs.Logger.Info(constructedOTPRequest.URL)
 
 	validOtp, err := fetchOTP(server, id, constructedOTPRequest)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+	logs.Logger.Info(validOtp)
 
-	// Save transaction history logic here...
-	// Process the transaction here
+	// Check if existing entry with id and otp exists
+	var existingEntry models.TransactionHistory
+	transactionCollection := models.InitializeTransactionHistoryCollection(db)
 
-	// Respond with the extracted OTP
+	err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
+	if err == mongo.ErrNoDocuments {
+		formattedDateTime := formatDateTime()
+
+		// Find the corresponding transaction history entry
+		var transaction models.TransactionHistory
+		err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+		if err != nil {
+			logs.Logger.Error(err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		// Create a new transactionHistory instance
+		numberHistory := models.TransactionHistory{
+			ID:            primitive.NewObjectID(),
+			UserID:        apiWalletUser.UserID.Hex(),
+			Service:       transaction.Service,
+			Price:         transaction.Price,
+			Server:        server,
+			TransactionID: id,
+			OTP:           validOtp,
+			Status:        "FINISHED",
+			Number:        transaction.Number,
+			DateTime:      formattedDateTime,
+		}
+
+		_, err = transactionCollection.InsertOne(ctx, numberHistory)
+		if err != nil {
+			logs.Logger.Error(err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		ipDetails, err := utils.GetIpDetails(c)
+		if err != nil {
+			logs.Logger.Error(err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		formattedIpDetails := removeHTMLTags(ipDetails)
+
+		// Send OTP details
+		otpDetail := services.OTPDetails{
+			Email:       userData.Email,
+			ServiceName: transaction.Service,
+			Price:       transaction.Price,
+			Server:      transaction.Server,
+			Number:      transaction.Number,
+			OTP:         transaction.OTP,
+			Ip:          formattedIpDetails,
+		}
+		err = services.OtpGetDetails(otpDetail)
+		if err != nil {
+			logs.Logger.Error(err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
 	return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
-}
-
-type Server struct {
-	Server int    `bson:"server"`
-	APIKey string `bson:"api_key"`
 }
 
 func searchCodes(codes []string, db *mongo.Database) ([]string, error) {
@@ -551,7 +515,7 @@ func HandleCheckOTP(c echo.Context) error {
 
 	// Fetch server data
 	fmt.Println("DEBUG: Fetching server data for server 1")
-	var serverData Server
+	var serverData models.Server
 	err := db.Collection("servers").FindOne(context.TODO(), bson.M{"server": 1}).Decode(&serverData)
 	if err != nil {
 		fmt.Println("ERROR: Failed to fetch server data:", err)
@@ -682,83 +646,11 @@ func HandleNumberCancel(c echo.Context) error {
 }
 
 // Helper functions
-
-// processTransaction handles the transaction logic
-func processTransaction(collection *mongo.Collection, validOtp, id, server, userID, userEmail string, ipDetails string) error {
-	// Check if the entry with the same ID and OTP already exists
-	var existingEntry models.TransactionHistory
-	err := collection.FindOne(context.TODO(), bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
-	if err == mongo.ErrNoDocuments {
-		// Fetch the transaction details
-		var transaction models.TransactionHistory
-		err = collection.FindOne(context.TODO(), bson.M{"id": id}).Decode(&transaction)
-		if err != nil {
-			return fmt.Errorf("transaction not found: %w", err)
-		}
-
-		// Format current date and time
-		currentTime := time.Now().Format("01/02/2006T03:04:05 PM")
-
-		// // Fetch IP details
-		// ipDetails, err := utils.GetIpDetails(c)
-		// if err != nil {
-		// 	return fmt.Errorf("failed to fetch IP details: %w", err)
-		// }
-
-		// // Format IP details as a multiline string
-		// ipDetailsString := fmt.Sprintf(
-		// 	"\nCity: %s\nState: %s\nPincode: %s\nCountry: %s\nService Provider: %s\nIP: %s",
-		// 	ipDetails.City, ipDetails.State, ipDetails.Pincode, ipDetails.Country, ipDetails.ServiceProvider, ipDetails.IP,
-		// )
-
-		// Create a new transaction history entry
-		numberHistory := models.TransactionHistory{
-			UserID:        userID,
-			Service:       transaction.Service,
-			Price:         transaction.Price,
-			Server:        server,
-			ID:            primitive.NewObjectID(),
-			TransactionID: id,
-			OTP:           validOtp,
-			Status:        "FINISHED",
-			Number:        transaction.Number,
-			DateTime:      currentTime,
-		}
-
-		// Save the new entry to the database
-		_, err = collection.InsertOne(context.TODO(), numberHistory)
-		if err != nil {
-			return fmt.Errorf("failed to save transaction history: %w", err)
-		}
-
-		// Send OTP details
-		err := services.OtpGetDetails(
-			userEmail,
-			transaction.Service,
-			transaction.Price,
-			server,
-			transaction.Number,
-			validOtp,
-			ipDetails,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to send OTP details: %w", err)
-		}
-
-		logs.Logger.Info("Transaction history and OTP details processed successfully.")
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("failed to check existing entry: %w", err)
-	}
-
-	logs.Logger.Info("Transaction already exists. Skipping.")
-	return nil
-}
-
 func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, server string) (models.Server, error) {
+	serverNumber, _ := strconv.Atoi(server)
 	var serverData models.Server
 	collection := models.InitializeServerCollection(db)
-	err := collection.FindOne(ctx, bson.M{"server": server}).Decode(&serverData)
+	err := collection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverData)
 	if err != nil {
 		return models.Server{}, err
 	}
@@ -819,7 +711,7 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 
 	case "2":
 		return ApiRequest{
-			URL: "https://5sim.net/v1/user/profile",
+			URL: fmt.Sprintf("https://5sim.net/v1/user/buy/activation/india/any/%s", data.Code),
 			Headers: map[string]string{
 				"Authorization": fmt.Sprintf("Bearer %s", apiToken),
 				"Accept":        "application/json",
@@ -865,7 +757,7 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 	case "7":
 		return ApiRequest{
 			URL: fmt.Sprintf(
-				"https://api2.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=false",
+				"https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
 				apiKeyServer, data.Code,
 			),
 			Headers: map[string]string{}, // Empty headers
@@ -874,7 +766,7 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 	case "8":
 		return ApiRequest{
 			URL: fmt.Sprintf(
-				"https://api2.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=true",
+				"https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22",
 				apiKeyServer, data.Code,
 			),
 			Headers: map[string]string{}, // Empty headers
@@ -884,14 +776,14 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 		return ApiRequest{
 			URL: fmt.Sprintf(
 				"http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=%s&quantity=1&country=IN&effectiveTime=10",
-				apiKeyServer, data.Code,
+				apiToken, data.Code,
 			),
 			Headers: map[string]string{}, // Empty headers
 		}, nil
 	case "10":
 		return ApiRequest{
 			URL: fmt.Sprintf(
-				"http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=%s&quantity=1&country=IN&effectiveTime=10",
+				"https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getNumber&service=%s&operator=any&country=22 ",
 				apiKeyServer, data.Code,
 			),
 			Headers: map[string]string{}, // Empty headers

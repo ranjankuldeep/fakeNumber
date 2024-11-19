@@ -43,9 +43,9 @@ func GetOTPServer1(otpUrl string, headers map[string]string, id string) (string,
 
 	switch responseText {
 	case "STATUS_WAIT_CODE":
-		return "", errors.New("waiting for SMS code")
+		return "", errors.New("WAIT_FOR_SMS_CODE")
 	case "STATUS_CANCEL":
-		return "", errors.New("number canceled")
+		return "", errors.New("NUMBER_CANCELED")
 	default:
 		return "", fmt.Errorf("unexpected response: %s", responseText)
 	}

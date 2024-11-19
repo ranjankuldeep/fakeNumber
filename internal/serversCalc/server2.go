@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 // Response structure for the successful response
@@ -20,6 +22,7 @@ type Response struct {
 
 // FetchNumber fetches the number and ID from the API
 func ExtractNumberServer2(url string, headers map[string]string) (string, string, error) {
+	logs.Logger.Info(url, headers)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", "", err
@@ -53,15 +56,13 @@ func ExtractNumberServer2(url string, headers map[string]string) (string, string
 		return "", "", errors.New("unknown error occurred: " + string(body))
 	}
 
-	// Decode the response
 	var response Response
 	if err := json.Unmarshal(body, &response); err != nil {
 		return "", "", err
 	}
-
-	// Remove "+91" from the phone number
+	logs.Logger.Info(response)
 	phone := strings.TrimPrefix(response.Phone, "+91")
 
 	// Return the ID and Phone
-	return fmt.Sprintf("%d", response.ID), phone, nil
+	return fmt.Sprintf("%s", phone), fmt.Sprintf("%d", response.ID), nil
 }

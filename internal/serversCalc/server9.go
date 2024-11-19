@@ -34,6 +34,7 @@ type NumberResponse struct {
 	} `json:"data"`
 }
 
+// TODO REMOVE THE FETCHING LOGIC
 // FetchNumberWithToken fetches the token and uses it to fetch the number in one function.
 func ExtractNumberServer9() (string, string, error) {
 	tokenURL := "http://www.phantomunion.com:10023/pickCode-api/push/ticket?key=af725ae5a94b62313009148d6581c9cf"

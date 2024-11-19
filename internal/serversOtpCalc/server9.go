@@ -31,42 +31,18 @@ type OTPServer9Response struct {
 }
 
 // FetchTokenAndOTP fetches the token and then fetches the OTP using the token
-func FetchTokenAndOTP(otpURL, serialNumber string) (string, error) {
-	tokenURL := "http://www.phantomunion.com:10023/pickCode-api/push/ticket?key=d1967b3a7609f20d010907ed41af1596"
-	resp, err := http.Get(tokenURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code while fetching token: %d", resp.StatusCode)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read token response: %w", err)
-	}
-
-	var tokenResp TokenResponse
-	err = json.Unmarshal(body, &tokenResp)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse token response: %w", err)
-	}
-
-	if tokenResp.Code != "200" {
-		return "", fmt.Errorf("failed to fetch token: %s", tokenResp.Message)
-	}
-
-	token := tokenResp.Data.Token
-
+func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) (string, error) {
 	// Step 2: Fetch OTP using the token
 	req, err := http.NewRequest("GET", otpURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create OTP request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	if len(headers) > 0 {
+		for key, value := range headers {
+			req.Header.Add(key, value)
+		}
+	}
 
 	otpResp, err := http.DefaultClient.Do(req)
 	if err != nil {

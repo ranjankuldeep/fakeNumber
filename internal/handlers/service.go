@@ -678,7 +678,7 @@ func fetchOTP(server, id string, otpRequest ApiRequest) (string, error) {
 		}
 		otpData.Code = otp
 	case "9":
-		otp, err := serversotpcalc.FetchTokenAndOTP(otpRequest.URL, id)
+		otp, err := serversotpcalc.FetchTokenAndOTP(otpRequest.URL, id, otpRequest.Headers)
 		if err != nil {
 			logs.Logger.Error(err)
 			return "", err

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 // OTPResponse represents the structure of the response from the API
@@ -61,6 +63,7 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (st
 	if err != nil {
 		return "", fmt.Errorf("failed to parse response JSON: %w", err)
 	}
+	logs.Logger.Info(otpResponse)
 
 	var smsTexts []string
 	for _, sms := range otpResponse.SMS {

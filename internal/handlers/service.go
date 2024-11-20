@@ -16,10 +16,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
-	"github.com/ranjankuldeep/fakeNumber/internal/database/services"
 	serverscalc "github.com/ranjankuldeep/fakeNumber/internal/serversCalc"
 	serversnextotpcalc "github.com/ranjankuldeep/fakeNumber/internal/serversNextOtpCalc"
 	serversotpcalc "github.com/ranjankuldeep/fakeNumber/internal/serversOtpCalc"
+	"github.com/ranjankuldeep/fakeNumber/internal/services"
 	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
@@ -471,7 +471,7 @@ func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {
 	var serverList models.ServerList
 	err := serverListCollection.FindOne(context.Background(), filter).Decode(&serverList)
 	if err != nil {
-		log.Fatalf("Error finding server list: %v", err)
+		logs.Logger.Errorf("Error finding server list: %v", err)
 	}
 
 	var foundServer models.ServerData

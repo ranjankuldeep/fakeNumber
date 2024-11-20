@@ -366,104 +366,112 @@ func HandleGetOtp(c echo.Context) error {
 
 	db := c.Get("db").(*mongo.Database)
 
+	// Validate API key and get user data
 	var apiWalletUser models.ApiWalletUser
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
-
 	err := apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
-	if err != nil || err == mongo.ErrEmptySlice {
+	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
 	}
 
 	var userData models.User
 	userCollection := models.InitializeUserCollection(db)
-
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&userData)
-	if err != nil || err == mongo.ErrEmptySlice {
+	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
 	}
 
+	// Get server data
 	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
+	// Construct OTP URL
 	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
 	}
 
-	validOtp, err := fetchOTP(server, id, constructedOTPRequest)
+	// Fetch OTPs
+	validOtpList, err := fetchOTP(server, id, constructedOTPRequest) // Assuming this returns []string
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	var existingEntry models.TransactionHistory
-	transactionCollection := models.InitializeTransactionHistoryCollection(db)
+	for _, validOtp := range validOtpList {
+		var existingEntry models.TransactionHistory
+		transactionCollection := models.InitializeTransactionHistoryCollection(db)
 
-	err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
-	if err == mongo.ErrNoDocuments {
-		formattedDateTime := formatDateTime()
+		err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
+		if err == mongo.ErrNoDocuments {
+			formattedDateTime := formatDateTime()
 
-		var transaction models.TransactionHistory
-		err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			var transaction models.TransactionHistory
+			err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+
+			numberHistory := models.TransactionHistory{
+				ID:            primitive.NewObjectID(),
+				UserID:        apiWalletUser.UserID.Hex(),
+				Service:       transaction.Service,
+				Price:         transaction.Price,
+				Server:        server,
+				TransactionID: id,
+				OTP:           validOtp,
+				Status:        "FINISHED",
+				Number:        transaction.Number,
+				DateTime:      formattedDateTime,
+			}
+
+			_, err = transactionCollection.InsertOne(ctx, numberHistory)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+
+			ipDetails, err := utils.GetIpDetails(c)
+			if err != nil {
+				logs.Logger.Error(err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			formattedIpDetails := removeHTMLTags(ipDetails)
+
+			otpDetail := services.OTPDetails{
+				Email:       userData.Email,
+				ServiceName: transaction.Service,
+				Price:       transaction.Price,
+				Server:      transaction.Server,
+				Number:      transaction.Number,
+				OTP:         validOtp,
+				Ip:          formattedIpDetails,
+			}
+			err = services.OtpGetDetails(otpDetail)
+			if err != nil {
+				logs.Logger.Error(err)
+			}
 		}
 
-		numberHistory := models.TransactionHistory{
-			ID:            primitive.NewObjectID(),
-			UserID:        apiWalletUser.UserID.Hex(),
-			Service:       transaction.Service,
-			Price:         transaction.Price,
-			Server:        server,
-			TransactionID: id,
-			OTP:           validOtp,
-			Status:        "FINISHED",
-			Number:        transaction.Number,
-			DateTime:      formattedDateTime,
-		}
-
-		_, err = transactionCollection.InsertOne(ctx, numberHistory)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-
-		ipDetails, err := utils.GetIpDetails(c)
-		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-		formattedIpDetails := removeHTMLTags(ipDetails)
-
-		otpDetail := services.OTPDetails{
-			Email:       userData.Email,
-			ServiceName: transaction.Service,
-			Price:       transaction.Price,
-			Server:      transaction.Server,
-			Number:      transaction.Number,
-			OTP:         transaction.OTP,
-			Ip:          formattedIpDetails,
-		}
-		err = services.OtpGetDetails(otpDetail)
-		if err != nil {
-			logs.Logger.Error(err)
-		}
-	}
-	if validOtp != "" {
-		go func() {
+		// Trigger the next OTP asynchronously for each OTP
+		go func(otp string) {
 			err := triggerNextOtp(db, server, serviceName, id)
 			if err != nil {
-				log.Printf("Error triggering next OTP: %v", err)
+				log.Printf("Error triggering next OTP for ID: %s, OTP: %s - %v", id, otp, err)
 			} else {
-				log.Printf("Successfully triggered next OTP for ID: %s", id)
+				log.Printf("Successfully triggered next OTP for ID: %s, OTP: %s", id, otp)
 			}
-		}()
+		}(validOtp)
 	}
-	return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "All OTPs processed successfully",
+	})
 }
 
 func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {
@@ -971,36 +979,36 @@ func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, 
 	return serverData, nil
 }
 
-func fetchOTP(server, id string, otpRequest ApiRequest) (string, error) {
-	otpData := OTPData{}
+func fetchOTP(server, id string, otpRequest ApiRequest) ([]string, error) {
+	otpData := []string{}
 	switch server {
 	case "1", "3", "4", "5", "6", "7", "8", "10":
 		otp, err := serversotpcalc.GetOTPServer1(otpRequest.URL, otpRequest.Headers, id)
 		if err != nil {
-			return "", err
+			return otpData, err
 		}
-		otpData.Code = otp
+		otpData = append(otpData, otp...)
 	case "2":
 		otp, err := serversotpcalc.GetSMSTextsServer2(otpRequest.URL, id, otpRequest.Headers)
 		if err != nil {
-			return "", err
+			return otpData, err
 		}
-		otpData.Code = otp
+		otpData = append(otpData, otp...)
 	case "9":
 		otp, err := serversotpcalc.FetchTokenAndOTP(otpRequest.URL, id, otpRequest.Headers)
 		if err != nil {
-			return "", err
+			return otpData, err
 		}
-		otpData.Code = otp
+		otpData = append(otpData, otp...)
 	case "11":
 		otp, err := serversotpcalc.GetOTPServer11(otpRequest.URL, id)
 		if err != nil {
-			return "", err
+			return otpData, err
 		}
-		otpData.Code = otp
+		otpData = append(otpData, otp...)
 
 	default:
-		return "", fmt.Errorf("INVALID_SERVER_CHOICE")
+		return otpData, fmt.Errorf("INVALID_SERVER_CHOICE")
 	}
-	return otpData.Code, nil
+	return otpData, nil
 }

@@ -20,37 +20,37 @@ type OTPServer11Response struct {
 	SMSCode       string `json:"sms_code,omitempty"`   // For OTP case
 }
 
-func GetOTPServer11(otpURL string, requestID string) (string, error) {
+func GetOTPServer11(otpURL string, requestID string) ([]string, error) {
 	logs.Logger.Info(otpURL)
 	resp, err := http.Get(otpURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch OTP: %w", err)
+		return []string{}, fmt.Errorf("failed to fetch OTP: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return []string{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return []string{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var otpResp OTPServer11Response
 	err = json.Unmarshal(body, &otpResp)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse response JSON: %w", err)
+		return []string{}, fmt.Errorf("failed to parse response JSON: %w", err)
 	}
 
 	if otpResp.ErrorCode == "wait_sms" {
-		return "STATUS_WAIT_CODE", nil
+		return []string{"STATUS_WAIT_CODE"}, nil
 	}
 
 	if otpResp.ErrorCode == "wrong_status" {
-		return "", errors.New("wrong_status")
+		return []string{}, errors.New("wrong_status")
 	}
 	if otpResp.SMSCode != "" {
-		return otpResp.SMSCode, nil
+		return []string{otpResp.SMSCode}, nil
 	}
-	return "", errors.New("Unexpected Response: No OTP Found and Not Waiting")
+	return []string{}, errors.New("Unexpected Response: No OTP Found and Not Waiting")
 }

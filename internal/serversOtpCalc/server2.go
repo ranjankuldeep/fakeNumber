@@ -29,11 +29,11 @@ type OTPResponse struct {
 	Country   string `json:"country"`
 }
 
-func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (string, error) {
+func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) ([]string, error) {
 	logs.Logger.Info(otpURL)
 	req, err := http.NewRequest("GET", otpURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return []string{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	if len(headers) > 0 {
@@ -45,23 +45,23 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (st
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return []string{}, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return []string{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return []string{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var otpResponse OTPResponse
 	err = json.Unmarshal(body, &otpResponse)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse response JSON: %w", err)
+		return []string{}, fmt.Errorf("failed to parse response JSON: %w", err)
 	}
 	logs.Logger.Info(otpResponse)
 
@@ -71,7 +71,7 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (st
 	}
 
 	if len(smsTexts) == 0 {
-		return "STATUS_WAIT_CODE", nil
+		return []string{"STATUS_WAIT_CODE"}, nil
 	}
-	return smsTexts[0], nil
+	return smsTexts, nil
 }

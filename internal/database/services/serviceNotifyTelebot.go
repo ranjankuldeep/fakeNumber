@@ -89,15 +89,15 @@ func OtpGetDetails(otpInfo OTPDetails) error {
 }
 
 // NumberCancelDetails sends number cancel details to Telegram
-func NumberCancelDetails(email, serviceName, price, server string, number int64, balance, ip string) error {
+func NumberCancelDetails(email, serviceName string, price float64, server string, number int64, balance float64, ip string) error {
 	result := "Number Cancel\n\n"
 	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05PM"))
 	result += fmt.Sprintf("User Email => %s\n\n", email)
 	result += fmt.Sprintf("Service Name => %s\n\n", serviceName)
-	result += fmt.Sprintf("Price => %s₹\n\n", price)
+	result += fmt.Sprintf("Price => %f₹\n\n", price)
 	result += fmt.Sprintf("Server => %s\n\n", server)
 	result += fmt.Sprintf("Number => %d\n\n", number)
-	result += fmt.Sprintf("Balance => %s₹\n\n", balance)
+	result += fmt.Sprintf("Balance => %f₹\n\n", balance)
 	result += "Status => Number Cancelled\n\n"
 	result += fmt.Sprintf("IP Details => %s\n\n", ip)
 

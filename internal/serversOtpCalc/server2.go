@@ -71,7 +71,7 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) (st
 	}
 
 	if len(smsTexts) == 0 {
-		return "NO_SMS_FOUND", nil
+		return "STATUS_WAIT_CODE", nil
 	}
 	return smsTexts[0], nil
 }

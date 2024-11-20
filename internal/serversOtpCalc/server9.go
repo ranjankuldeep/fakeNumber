@@ -77,7 +77,7 @@ func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) (s
 		if vc.Vc != "" {
 			return vc.Vc, nil
 		} else if vc.Vc == "" {
-			return "NO_OTP_RECEIVED_YET", nil
+			return "STATUS_WAIT_CODE", nil
 		}
 	}
 	return "", errors.New("NO_OTP_FOUND")

@@ -11,7 +11,7 @@ import (
 )
 
 type OTPServer11Response struct {
-	RequestID     string `json:"request_id"`
+	RequestID     int    `json:"request_id"`
 	ApplicationID int    `json:"application_id"`
 	CountryID     int    `json:"country_id"`
 	Number        string `json:"number"`
@@ -43,7 +43,7 @@ func GetOTPServer11(otpURL string, requestID string) (string, error) {
 	}
 
 	if otpResp.ErrorCode == "wait_sms" {
-		return "wait_sms", nil
+		return "STATUS_WAIT_CODE", nil
 	}
 
 	if otpResp.ErrorCode == "wrong_status" {

@@ -349,11 +349,10 @@ func removeHTMLTags(input string) string {
 
 func HandleGetOtp(c echo.Context) error {
 	ctx := context.Background()
-
 	id := c.QueryParam("id")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
-	serviceName := c.QueryParam("serviceName")
+	serviceName := c.QueryParam("serviceName") // new parameter
 
 	if id == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
@@ -455,9 +454,14 @@ func HandleGetOtp(c echo.Context) error {
 		}
 	}
 	if validOtp != "" {
-		if err := triggerNextOtp(db, server, serviceName, id); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TRIGGERING_NEXT_OTP"})
-		}
+		go func() {
+			err := triggerNextOtp(db, server, serviceName, id)
+			if err != nil {
+				log.Printf("Error triggering next OTP: %v", err)
+			} else {
+				log.Printf("Successfully triggered next OTP for ID: %s", id)
+			}
+		}()
 	}
 	return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
 }
@@ -472,6 +476,7 @@ func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {
 	err := serverListCollection.FindOne(context.Background(), filter).Decode(&serverList)
 	if err != nil {
 		logs.Logger.Errorf("Error finding server list: %v", err)
+		return err
 	}
 
 	var foundServer models.ServerData
@@ -550,9 +555,10 @@ func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {
 }
 
 func getApiKeyServer(db *mongo.Database, serverNumber int) (ServerSecrets, error) {
+	logs.Logger.Info(serverNumber)
 	var server models.Server
 	serverCollection := models.InitializeServerCollection(db)
-	err := serverCollection.FindOne(context.TODO(), bson.M{"server": serverNumber})
+	err := serverCollection.FindOne(context.TODO(), bson.M{"server": serverNumber}).Decode(&server)
 	if err != nil {
 		return ServerSecrets{}, fmt.Errorf("NO_SERVER_FOUND")
 	}

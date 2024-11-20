@@ -6,9 +6,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 func CallNextOTPServerRetry(otpURL string, headers map[string]string) error {
+	logs.Logger.Info(otpURL)
 	req, err := http.NewRequest("GET", otpURL, nil)
 	if err != nil {
 		fmt.Printf("Error creating the HTTP request: %v\n", err)

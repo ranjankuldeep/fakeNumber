@@ -61,6 +61,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
 	temp := c.QueryParam("serverName")
+	isMultiple := c.QueryParam("isMultiple")
 	logs.Logger.Infof("%s %s %s %s", serverDataCode, apiKey, server, temp)
 
 	serviceName := strings.ReplaceAll(temp, "%", " ")

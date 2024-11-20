@@ -7,7 +7,7 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 )
 
-func constructApiUrl(server, apiKeyServer string, apiToken string, data models.ServerData) (ApiRequest, error) {
+func constructApiUrl(server, apiKeyServer string, apiToken string, data models.ServerData, isMultiple string) (ApiRequest, error) {
 	switch server {
 	case "1":
 		return ApiRequest{
@@ -98,13 +98,23 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 			Headers: map[string]string{}, // Empty headers
 		}, nil
 	case "11":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=false",
-				apiToken,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
+		if isMultiple == "true" {
+			return ApiRequest{
+				URL: fmt.Sprintf(
+					"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=true",
+					apiToken,
+				),
+				Headers: map[string]string{}, // Empty headers
+			}, nil
+		} else {
+			return ApiRequest{
+				URL: fmt.Sprintf(
+					"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=false",
+					apiToken,
+				),
+				Headers: map[string]string{}, // Empty headers
+			}, nil
+		}
 
 	default:
 		return ApiRequest{}, errors.New("invalid server value")

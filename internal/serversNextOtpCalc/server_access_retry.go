@@ -40,6 +40,6 @@ func CallNextOTPServerRetry(otpURL string, headers map[string]string) error {
 	if strings.Contains(responseString, "ACCESS_RETRY_GET") {
 		return nil
 	} else {
-		return errors.New("DIDN'T_RECEIVED_VALID_RESPONSE")
+		return errors.New("NEXT_OTP_NOT_TRIGGERED")
 	}
 }

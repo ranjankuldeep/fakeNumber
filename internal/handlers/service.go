@@ -132,7 +132,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		}
 	}
 	// fetch id and numbers
-	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData)
+	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't construcrt api url"})
@@ -231,7 +231,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
 		if err != nil {
 			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "couldn't fetch the number"})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -401,6 +401,7 @@ func HandleGetOtp(c echo.Context) error {
 	// Fetch OTPs
 	validOtpList, err := fetchOTP(server, id, constructedOTPRequest) // Assuming this returns []string
 	if err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
@@ -523,7 +524,7 @@ func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {
 			if err != nil {
 				return err
 			}
-			nextOtpUrl := fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=setStatus&status=3&id%s143308304", secret.ApiKeyServer, id)
+			nextOtpUrl := fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=setStatus&status=3&id=%s", secret.ApiKeyServer, id)
 			headers := map[string]string{}
 			if err := serversnextotpcalc.CallNextOTPServerRetry(nextOtpUrl, headers); err != nil {
 				return err

@@ -46,6 +46,6 @@ func CallNextOTPServerUnMarshalling(otpURL string, headers map[string]string) er
 	if apiResponse.Success {
 		return nil
 	} else {
-		return errors.New("NOT_A_VALID_RESPONSE")
+		return errors.New("NEXT_OTP_NOT_TRIGGERED")
 	}
 }

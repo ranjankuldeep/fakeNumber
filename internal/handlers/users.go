@@ -397,6 +397,111 @@ func GoogleSignup(c echo.Context) error {
 
 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "User already exists, Please Login."})
 }
+func Login(c echo.Context) error {
+	// Parse request body
+	type LoginRequest struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Captcha  string `json:"captcha"`
+	}
+
+	var req LoginRequest
+	if err := c.Bind(&req); err != nil {
+		log.Println("ERROR: Invalid request body:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	// Check CAPTCHA token
+	if req.Captcha == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Please complete the CAPTCHA"})
+	}
+
+	// Verify CAPTCHA
+	recaptchaSecretKey := os.Getenv("RECAPTCHA_SECRET_KEY")
+	url := "https://www.google.com/recaptcha/api/siteverify?secret=" + recaptchaSecretKey + "&response=" + req.Captcha
+	resp, err := http.Post(url, "application/json", nil)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		log.Println("ERROR: CAPTCHA verification failed:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid CAPTCHA"})
+	}
+	defer resp.Body.Close()
+
+	var captchaResult map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&captchaResult); err != nil {
+		log.Println("ERROR: Failed to decode CAPTCHA response:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+	if success, ok := captchaResult["success"].(bool); !ok || !success {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "CAPTCHA verification failed"})
+	}
+
+	// Database setup
+	db := c.Get("db").(*mongo.Database)
+	userCol := db.Collection("users")
+	walletCol := db.Collection("apikey_and_balances")
+
+	// Define a struct to represent user data
+	type LoginUser struct {
+		ID       string `bson:"_id"`
+		Email    string `bson:"email"`
+		Password string `bson:"password"`
+	}
+
+	// Find the user by email
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var loginUser LoginUser
+	err = userCol.FindOne(ctx, bson.M{"email": req.Email}).Decode(&loginUser)
+	if err == mongo.ErrNoDocuments {
+		log.Println("ERROR: User not found")
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+	} else if err != nil {
+		log.Println("ERROR: Database error while fetching user:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+
+	// Compare the provided password with the hashed password
+	err = bcrypt.CompareHashAndPassword([]byte(loginUser.Password), []byte(req.Password))
+	if err != nil {
+		log.Println("ERROR: Invalid credentials")
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
+	}
+
+	// Fetch the wallet information
+	type WalletUser struct {
+		UserID     string `bson:"userId"`
+		TrxAddress string `bson:"trxAddress"`
+	}
+
+	var wallet WalletUser
+	err = walletCol.FindOne(ctx, bson.M{"userId": loginUser.ID}).Decode(&wallet)
+	if err == mongo.ErrNoDocuments {
+		log.Println("ERROR: Wallet not found for user:", err)
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Wallet not found"})
+	} else if err != nil {
+		log.Println("ERROR: Database error while fetching wallet:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+
+	// Generate JWT token
+	jwtSecret := os.Getenv("JWT_SECRET_KEY")
+	claims := jwt.MapClaims{
+		"email":      loginUser.Email,
+		"userId":     loginUser.ID,
+		"trxAddress": wallet.TrxAddress,
+		"exp":        time.Now().Add(7 * 24 * time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(jwtSecret))
+	if err != nil {
+		log.Println("ERROR: Failed to generate JWT token:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to generate token"})
+	}
+
+	log.Println("INFO: User logged in successfully")
+	return c.JSON(http.StatusOK, map[string]string{"token": tokenString})
+}
 
 func GoogleLogin(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)

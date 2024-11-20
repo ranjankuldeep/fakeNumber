@@ -18,6 +18,7 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/services"
 	serverscalc "github.com/ranjankuldeep/fakeNumber/internal/serversCalc"
+	serversnextotpcalc "github.com/ranjankuldeep/fakeNumber/internal/serversNextOtpCalc"
 	serversotpcalc "github.com/ranjankuldeep/fakeNumber/internal/serversOtpCalc"
 	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
@@ -42,6 +43,11 @@ type NumberData struct {
 
 type OTPData struct {
 	Code string
+}
+
+type ServerSecrets struct {
+	ApiKeyServer string
+	Token        string
 }
 
 var numData NumberData
@@ -343,9 +349,11 @@ func removeHTMLTags(input string) string {
 
 func HandleGetOtp(c echo.Context) error {
 	ctx := context.Background()
+
 	id := c.QueryParam("id")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
+	serviceName := c.QueryParam("serviceName")
 
 	if id == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
@@ -447,7 +455,113 @@ func HandleGetOtp(c echo.Context) error {
 			logs.Logger.Error(err)
 		}
 	}
+	if validOtp != "" {
+		if err := triggerNextOtp(db, server, serviceName, id); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TRIGGERING_NEXT_OTP"})
+		}
+	}
 	return c.JSON(http.StatusOK, map[string]string{"otp": validOtp})
+}
+
+func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {
+	serverNumber, _ := strconv.Atoi(server)
+	serverListCollection := models.InitializeServerListCollection(db)
+
+	filter := bson.M{"name": serviceName}
+
+	var serverList models.ServerList
+	err := serverListCollection.FindOne(context.Background(), filter).Decode(&serverList)
+	if err != nil {
+		log.Fatalf("Error finding server list: %v", err)
+	}
+
+	var foundServer models.ServerData
+	for _, server := range serverList.Servers {
+		if server.Server == serverNumber {
+			foundServer = server
+			break
+		}
+	}
+
+	if foundServer.Otp == "Multiple Otp" {
+		switch serverNumber {
+		case 1:
+			secret, err := getApiKeyServer(db, serverNumber)
+			if err != nil {
+				return err
+			}
+			nextOtpUrl := fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=setStatus&id=%s&status=3", secret.ApiKeyServer, id)
+			headers := map[string]string{}
+			if err := serversnextotpcalc.CallNextOTPServerWaiting(nextOtpUrl, headers); err != nil {
+				return err
+			}
+		case 3:
+			secret, err := getApiKeyServer(db, serverNumber)
+			if err != nil {
+				return err
+			}
+			nextOtpUrl := fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=setStatus&status=3&id=%s", secret.ApiKeyServer, id)
+			headers := map[string]string{}
+			if err := serversnextotpcalc.CallNextOTPServerRetry(nextOtpUrl, headers); err != nil {
+				return err
+			}
+		case 5:
+			secret, err := getApiKeyServer(db, serverNumber)
+			if err != nil {
+				return err
+			}
+			nextOtpUrl := fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=setStatus&status=3&id%s143308304", secret.ApiKeyServer, id)
+			headers := map[string]string{}
+			if err := serversnextotpcalc.CallNextOTPServerRetry(nextOtpUrl, headers); err != nil {
+				return err
+			}
+		case 7:
+			secret, err := getApiKeyServer(db, serverNumber)
+			if err != nil {
+				return err
+			}
+			nextOtpUrl := fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=setStatus&status=3&id=%s", secret.ApiKeyServer, id)
+			headers := map[string]string{}
+			if err := serversnextotpcalc.CallNextOTPServerRetry(nextOtpUrl, headers); err != nil {
+				return err
+			}
+		case 8:
+			secret, err := getApiKeyServer(db, serverNumber)
+			if err != nil {
+				return err
+			}
+			nextOtpUrl := fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=setStatus&status=3&id=%s", secret.ApiKeyServer, id)
+			headers := map[string]string{}
+			if err := serversnextotpcalc.CallNextOTPServerRetry(nextOtpUrl, headers); err != nil {
+				return err
+			}
+		case 11:
+			secret, err := getApiKeyServer(db, serverNumber)
+			if err != nil {
+				return err
+			}
+			nextOtpUrl := fmt.Sprintf("https://api2.sms-man.com/control/set-status?token=%s&request_id=%s&status=retrysms", secret.Token, id)
+			headers := map[string]string{}
+			if err := serversnextotpcalc.CallNextOTPServerRetry(nextOtpUrl, headers); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func getApiKeyServer(db *mongo.Database, serverNumber int) (ServerSecrets, error) {
+	var server models.Server
+	serverCollection := models.InitializeServerCollection(db)
+	err := serverCollection.FindOne(context.TODO(), bson.M{"server": serverNumber})
+	if err != nil {
+		return ServerSecrets{}, fmt.Errorf("NO_SERVER_FOUND")
+	}
+
+	return ServerSecrets{
+		ApiKeyServer: server.APIKey,
+		Token:        server.Token,
+	}, nil
 }
 
 func searchCodes(codes []string, db *mongo.Database) ([]string, error) {

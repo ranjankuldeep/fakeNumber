@@ -1230,6 +1230,7 @@ func GetAllBlockedUsers(c echo.Context) error {
 }
 
 // GetOrdersByUserId retrieves orders by a specific user ID
+// GetOrdersByUserId retrieves orders by a specific user ID
 func GetOrdersByUserId(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	orderCol := models.InitializeOrderCollection(db)
@@ -1242,8 +1243,13 @@ func GetOrdersByUserId(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Convert userId to ObjectID
+	userPrimitiveId, err := primitive.ObjectIDFromHex(userId)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid userId format"})
+	}
+
 	// Query to find orders for the userId and sort them by orderTime in descending order
-	userPrimitiveId, _ := primitive.ObjectIDFromHex(userId)
 	filter := bson.M{"userId": userPrimitiveId}
 	opts := options.Find().SetSort(bson.D{{Key: "orderTime", Value: -1}})
 
@@ -1259,6 +1265,12 @@ func GetOrdersByUserId(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error decoding orders", "error": err.Error()})
 	}
+
+	// Explicitly handle case where no orders are found
+	if len(orders) == 0 {
+		return c.JSON(http.StatusOK, []bson.M{}) // Return empty array
+	}
+
 	return c.JSON(http.StatusOK, orders)
 }
 

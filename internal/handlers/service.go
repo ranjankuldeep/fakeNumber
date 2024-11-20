@@ -262,6 +262,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		TransactionID: numData.Id,
 		Price:         fmt.Sprintf("%.2f", price),
 		Server:        server,
+		OTP:           "",
 		ID:            primitive.NewObjectID(),
 		Number:        numData.Number,
 		Status:        "FINISHED",
@@ -272,7 +273,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save transaction history."})
 	}
 
-	// Save order
 	orderCollection := models.InitializeOrderCollection(db)
 	order := models.Order{
 		ID:             primitive.NewObjectID(),
@@ -401,13 +401,12 @@ func HandleGetOtp(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-	logs.Logger.Info(validOtp)
+
 	var existingEntry models.TransactionHistory
 	transactionCollection := models.InitializeTransactionHistoryCollection(db)
 
 	err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
 	if err == mongo.ErrNoDocuments {
-		logs.Logger.Info("i am printing continoulsy")
 		formattedDateTime := formatDateTime()
 
 		var transaction models.TransactionHistory
@@ -751,6 +750,8 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "TRANSACTION_HISTORY_NOT_FOUND"})
 	}
 
+	// if otp recieved
+	// delete form order collection and just return from here.
 	if transactionData.OTP != "" {
 		orderCollection := models.InitializeOrderCollection(db)
 		_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
@@ -761,68 +762,73 @@ func HandleNumberCancel(c echo.Context) error {
 			return c.JSON(http.StatusOK, map[string]string{"msg": "OTP_RECEIVED"})
 		}
 	}
+	// if already cancelled return with number already cancelled
 	if transactionData.Status == "CANCELLED" {
 		return c.JSON(http.StatusOK, map[string]string{"msg": "NUMBER_ALREADY_CANCELLED"})
 	}
-	_, _, err = fetchAndProcess(constructedNumberRequest.URL, server, id, db)
+
+	// if no otp recieved and status is not cancelled then cancel from the third pary server and refund the balance
+	_, existingEntry, err := fetchAndProcess(constructedNumberRequest.URL, server, id, db)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	var transaction models.TransactionHistory
-	formattedData := formatDateTime()
+	// if no existing entry found with status cancelled then make a new transaction with status cancelled.
+	if existingEntry.ID.Hex() == "" || existingEntry.Status == "" {
+		var transaction models.TransactionHistory
+		formattedData := formatDateTime()
 
-	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-
-	numberHistory := models.TransactionHistory{
-		UserID:        transaction.UserID,
-		Service:       transaction.Service,
-		Price:         transaction.Price,
-		Server:        server,
-		TransactionID: id,
-		OTP:           "",
-		Status:        "CANCELLED",
-		Number:        transaction.Number,
-		DateTime:      formattedData,
-	}
-
-	_, err = transactionCollection.InsertOne(ctx, numberHistory)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-
-	price, err := strconv.ParseFloat(transaction.Price, 64)
-	newBalance := apiWalletUser.Balance + price
-	newBalance = math.Round(newBalance*100) / 100
-
-	if transaction.OTP == "" {
-		update := bson.M{
-			"$set": bson.M{"balance": newBalance},
-		}
-		filter := bson.M{"_id": apiWalletUser.UserID}
-
-		_, err = apiWalletColl.UpdateOne(ctx, filter, update)
+		err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
 		if err != nil {
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-	}
-	ipDetails, err := utils.GetIpDetails(c)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
-	}
-	services.NumberCancelDetails(user.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
 
-	// Delete the order entry
-	_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_ENTRY_NOT_FOUND"})
+		numberHistory := models.TransactionHistory{
+			UserID:        transaction.UserID,
+			Service:       transaction.Service,
+			Price:         transaction.Price,
+			Server:        server,
+			TransactionID: id,
+			OTP:           "",
+			Status:        "CANCELLED",
+			Number:        transaction.Number,
+			DateTime:      formattedData,
+		}
+
+		_, err = transactionCollection.InsertOne(ctx, numberHistory)
+		if err != nil {
+			logs.Logger.Error(err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		price, err := strconv.ParseFloat(transaction.Price, 64)
+		newBalance := apiWalletUser.Balance + price
+		newBalance = math.Round(newBalance*100) / 100
+
+		if transaction.OTP == "" {
+			update := bson.M{
+				"$set": bson.M{"balance": newBalance},
+			}
+			filter := bson.M{"_id": apiWalletUser.UserID}
+
+			_, err = apiWalletColl.UpdateOne(ctx, filter, update)
+			if err != nil {
+				logs.Logger.Error(err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+		}
+		ipDetails, err := utils.GetIpDetails(c)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
+		}
+		services.NumberCancelDetails(user.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
+
+		_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
+		if err != nil {
+			logs.Logger.Error(err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_ENTRY_NOT_FOUND"})
+		}
 	}
 	return nil
 }
@@ -991,232 +997,4 @@ func fetchOTP(server, id string, otpRequest ApiRequest) (string, error) {
 		return "", fmt.Errorf("INVALID_SERVER_CHOICE")
 	}
 	return otpData.Code, nil
-}
-
-func constructApiUrl(server, apiKeyServer string, apiToken string, data models.ServerData) (ApiRequest, error) {
-	switch server {
-	case "1":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-				apiKeyServer, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	case "2":
-		return ApiRequest{
-			URL: fmt.Sprintf("https://5sim.net/v1/user/buy/activation/india/any/%s", data.Code),
-			Headers: map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", apiToken),
-				"Accept":        "application/json",
-			},
-		}, nil
-
-	case "3":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://smshub.org/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22&maxPrice=%s",
-				apiKeyServer, data.Code, data.Price,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	case "4":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-				apiKeyServer, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	case "5":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-				apiKeyServer, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	case "6":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-				apiKeyServer, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	case "7":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-				apiKeyServer, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	case "8":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22",
-				apiKeyServer, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	case "9":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"http://www.phantomunion.com:10023/pickCode-api/push/buyCandy?token=%s&businessCode=%s&quantity=1&country=IN&effectiveTime=10",
-				apiToken, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-	case "10":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getNumber&service=%s&operator=any&country=22 ",
-				apiKeyServer, data.Code,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-	case "11":
-		return ApiRequest{
-			URL: fmt.Sprintf(
-				"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=false",
-				apiToken,
-			),
-			Headers: map[string]string{}, // Empty headers
-		}, nil
-
-	default:
-		return ApiRequest{}, errors.New("invalid server value")
-	}
-}
-
-func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error) {
-	switch server {
-	case "1":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "2":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://5sim.net/v1/user/check/%s", id),
-			Headers: map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token), "Accept": "application/json"},
-		}, nil
-	case "3":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "4":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "5":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "6":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "7":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "8":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "9":
-		return ApiRequest{
-			URL:     fmt.Sprintf("http://www.phantomunion.com:10023/pickCode-api/push/sweetWrapper?token=%s&serialNumber=%s", token, id),
-			Headers: map[string]string{},
-		}, nil
-	case "10":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "11":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	default:
-		return ApiRequest{}, fmt.Errorf("INVLAID_SERVER_CHOICE")
-	}
-}
-
-func constructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequest, error) {
-	switch server {
-	case "1":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=setStatus&id=%s&status=8", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "2":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://5sim.net/v1/user/cancel/%s", id),
-			Headers: map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token), "Accept": "application/json"},
-		}, nil
-	case "3":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "4":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "5":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "6":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "7":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "8":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "9":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://own5k.in/p/ccpay.php?type=cancel&number=%s", number),
-			Headers: map[string]string{},
-		}, nil
-	case "10":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=setStatus&id=%s&status=8", apiKeyServer, id),
-			Headers: map[string]string{},
-		}, nil
-	case "11":
-		return ApiRequest{
-			URL:     fmt.Sprintf("https://api2.sms-man.com/control/set-status?token=%s&request_id=%s&status=reject", token, id),
-			Headers: map[string]string{},
-		}, nil
-	default:
-		return ApiRequest{}, fmt.Errorf("INVLAID_SERVER_CHOICE")
-	}
 }

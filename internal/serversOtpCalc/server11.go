@@ -11,7 +11,7 @@ import (
 )
 
 type OTPServer11Response struct {
-	RequestID     int    `json:"request_id"`
+	RequestID     string `json:"request_id"`
 	ApplicationID int    `json:"application_id"`
 	CountryID     int    `json:"country_id"`
 	Number        string `json:"number"`

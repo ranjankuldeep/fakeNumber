@@ -710,6 +710,8 @@ func HandleNumberCancel(c echo.Context) error {
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
 
+	fmt.Println("DEBUG: Received request with ID:", id, "API Key:", apiKey, "Server:", server)
+
 	if id == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
 	}
@@ -786,6 +788,7 @@ func HandleNumberCancel(c echo.Context) error {
 	// if no otp recieved and status is not cancelled then cancel from the third pary server and refund the balance
 	_, existingEntry, err := fetchAndProcess(constructedNumberRequest.URL, server, id, db)
 	if err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
@@ -882,6 +885,8 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 		if strings.HasPrefix(responseData, "ACCESS_APPROVED") {
 			otpReceived = true
@@ -898,6 +903,8 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 		if responseDataJSON["status"] == "order has sms" {
 			otpReceived = true
@@ -909,7 +916,10 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
+
 	case "4", "5", "6":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_STATUS") ||
 			strings.HasPrefix(responseData, "BAD_ACTION") || strings.HasPrefix(responseData, "NO_ACTIVATION") {
@@ -917,6 +927,8 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 
 	case "7", "8":
@@ -930,6 +942,8 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 
 	case "9":
@@ -938,6 +952,8 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 	case "10":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
@@ -945,6 +961,8 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 
 	case "11":
@@ -959,6 +977,8 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else {
+			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 		break
 	default:

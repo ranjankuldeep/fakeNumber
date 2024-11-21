@@ -48,6 +48,9 @@ func GetOTPServer1(otpUrl string, headers map[string]string, id string) ([]strin
 	if strings.Contains(responseText, "STATUS_WAIT_RETRY") {
 		return []string{}, nil
 	}
+	if strings.Contains(responseText, "ACCESS_CANCEL") {
+		return []string{}, nil
+	}
 	if strings.Contains(responseText, "STATUS_WAIT_RESEND") {
 		return []string{}, nil
 	}

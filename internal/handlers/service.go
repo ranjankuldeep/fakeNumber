@@ -226,16 +226,25 @@ func HandleGetNumberRequest(c echo.Context) error {
 		numData.Id = id
 		numData.Number = number
 	case "11":
-		// TODO: FIX the Multi url get number
-		// Multiple OTP server with different url
+		// Multiple OTP servers with different URLs
 		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
 		if err != nil {
+			// Handle specific "no_channels" error
+			if strings.Contains(err.Error(), "no_channels") {
+				logs.Logger.Warn("No channels available. The channel limit has been reached.")
+				return c.JSON(http.StatusServiceUnavailable, map[string]string{
+					"error": "No number",
+				})
+			}
+
+			// Log and return other errors
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		numData.Id = id
 		numData.Number = number
 	}
+
 	logs.Logger.Info(fmt.Sprintf("id-%s number-%s", numData.Id, numData.Number))
 
 	// update the price with the discount
@@ -933,16 +942,37 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 
 	case "7", "8":
 		var responseDataJSON map[string]interface{}
+		fmt.Println("Debug: Received response body for server 7 or 8:", string(body))
+
 		err = json.Unmarshal(body, &responseDataJSON)
 		if err != nil {
+			fmt.Printf("Debug: Failed to parse JSON response: %s\n", string(body))
 			return false, existingEntry, fmt.Errorf("failed to parse JSON response: %w", err)
 		}
-		if success, ok := responseDataJSON["success"].(bool); ok && success {
+
+		fmt.Println("Debug: Parsed JSON response successfully:", responseDataJSON)
+
+		// Check if the "success" field exists and is a boolean
+		success, ok := responseDataJSON["success"].(bool)
+		if ok && success {
+			fmt.Println("Debug: Success field found and true. Checking for CANCELLED entry in the database.")
+
+			// Find the entry in the database
 			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
 			if err != nil && err != mongo.ErrNoDocuments {
+				fmt.Printf("Debug: Error finding entry in the database for id=%s: %v\n", id, err)
 				return false, existingEntry, err
 			}
+
+			// If no document is found, log for debugging
+			if err == mongo.ErrNoDocuments {
+				fmt.Printf("Debug: No CANCELLED entry found for id=%s in the database.\n", id)
+			} else {
+				fmt.Printf("Debug: Found CANCELLED entry for id=%s: %+v\n", id, existingEntry)
+			}
 		} else {
+			// Log error details if the "success" field is not as expected
+			fmt.Printf("Debug: 'success' field missing or false in response: %v\n", responseDataJSON)
 			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
 

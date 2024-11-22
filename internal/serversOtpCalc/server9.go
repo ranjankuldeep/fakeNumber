@@ -66,11 +66,15 @@ func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) ([
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to parse OTP response: %w", err)
 	}
+	logs.Logger.Infof("OTP response code  %+v", otpResponse.Code)
 
-	if otpResponse.Code != "200" {
+	if otpResponse.Code == "210" {
 		return []string{}, errors.New(otpResponse.Message)
-	} else if otpResponse.Code == "210" {
+	} else if otpResponse.Code == "245" {
+		return []string{"STATUS_CANCEL"}, nil
+	} else if otpResponse.Code != "200" {
 		return []string{}, errors.New(otpResponse.Message)
+
 	}
 
 	for _, vc := range otpResponse.Data.VerificationCode {

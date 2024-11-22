@@ -9,7 +9,7 @@ import (
 func RegisterServiceRoutes(e *echo.Echo) {
 	e.GET("/api/get-number", handlers.HandleGetNumberRequest)
 	e.GET("/api/check-otp", handlers.HandleCheckOTP)
-	e.GET("/api/cancel-order", handlers.HandleCancelOrder)
+	e.POST("/api/cancel-order", handlers.HandleCancelOrder)
 	e.GET("/api/get-otp", handlers.HandleGetOtp)
 	e.GET("/api/number-cancel", handlers.HandleNumberCancel)
 }

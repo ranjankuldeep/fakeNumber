@@ -264,7 +264,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_UPDATE_USER_BALANCE"})
 	}
 
-	// Save transaction history
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
 	transaction := models.TransactionHistory{
 		UserID:        apiWalletUser.UserID.Hex(),
@@ -283,10 +282,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save transaction history."})
 	}
 
-	// if transaction date is passed 19 minutes and if otp == "" or otp == "STATUS_WATI_CODE" then
-	// make a cancel number request.
-	// it will automatically remove the order entry from forntend.
-
 	orderCollection := models.InitializeOrderCollection(db)
 	order := models.Order{
 		ID:             primitive.NewObjectID(),
@@ -304,6 +299,84 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save order."})
 	}
 	logs.Logger.Info(numData.Id, numData.Number)
+
+	go func(id, number, userId string, db *mongo.Database, ctx context.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				logs.Logger.Error("Recovered from panic in OTP handling goroutine:", r)
+			}
+		}()
+
+		// Define the wait duration for each server case
+		var waitDuration time.Duration
+		switch server {
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11":
+			waitDuration = 3 * time.Minute
+		}
+
+		logs.Logger.Infof("Waiting for %s before checking OTP for server %s", waitDuration, server)
+		time.Sleep(waitDuration)
+
+		// Fetch server data with maintenance check
+		serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+
+		// Check for existing OTP in the transaction collection
+		var transactionData []models.TransactionHistory
+		transactionCollection := models.InitializeTransactionHistoryCollection(db)
+
+		filter := bson.M{
+			"userId": userId,
+			"id":     id,
+		}
+		cursor, err := transactionCollection.Find(ctx, filter)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+		defer cursor.Close(ctx)
+
+		if err := cursor.All(ctx, &transactionData); err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+
+		if len(transactionData) == 0 {
+			return
+		}
+
+		otpArrived := false
+		for _, transaction := range transactionData {
+			if transaction.OTP != "" && transaction.OTP != "STATUS_WAIT_CODE" && transaction.OTP != "STATUS_CANCEL" {
+				otpArrived = true
+				break
+			}
+		}
+		if otpArrived {
+			logs.Logger.Infof("OTP already arrived for transaction %s, skipping third-party call.", id)
+			return
+		}
+
+		// Construct number request URL
+		constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, number)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+
+		// Call third-party API to cancel the number
+		err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+
+		logs.Logger.Infof("Third-party call for transaction %s completed successfully.", id)
+	}(numData.Id, numData.Number, apiWalletUser.UserID.Hex(), db, ctx)
+
 	return c.JSON(http.StatusOK, map[string]string{"id": numData.Id, "number": numData.Number})
 }
 

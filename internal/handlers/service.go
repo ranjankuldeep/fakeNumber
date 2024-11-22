@@ -775,7 +775,7 @@ func HandleNumberCancel(c echo.Context) error {
 	orderCollection := models.InitializeOrderCollection(db)
 	err := orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "COULDN'T FETCH EXISTING ORDER"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "number already cancelled"})
 	}
 
 	var apiWalletUser models.ApiWalletUser
@@ -904,7 +904,7 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
 	}
 	services.NumberCancelDetails(user.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
-	return nil
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }
 
 func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, headers map[string]string) error {

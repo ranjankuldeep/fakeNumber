@@ -283,6 +283,10 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save transaction history."})
 	}
 
+	// if transaction date is passed 19 minutes and if otp == "" or otp == "STATUS_WATI_CODE" then
+	// make a cancel number request.
+	// it will automatically remove the order entry from forntend.
+
 	orderCollection := models.InitializeOrderCollection(db)
 	order := models.Order{
 		ID:             primitive.NewObjectID(),
@@ -419,7 +423,7 @@ func HandleGetOtp(c echo.Context) error {
 		transactionCollection := models.InitializeTransactionHistoryCollection(db)
 
 		err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
-		if err == mongo.ErrNoDocuments {
+		if err == mongo.ErrNoDocuments || err == mongo.ErrEmptySlice {
 			formattedDateTime := formatDateTime()
 
 			var transaction models.TransactionHistory
@@ -761,6 +765,7 @@ func HandleNumberCancel(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
+	logs.Logger.Info(serverData)
 
 	constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, order.Number)
 	if err != nil {
@@ -795,7 +800,7 @@ func HandleNumberCancel(c echo.Context) error {
 	}
 
 	// if no otp recieved and status is not cancelled then cancel from the third pary server and refund the balance
-	_, existingEntry, err := fetchAndProcess(constructedNumberRequest.URL, server, id, db)
+	_, existingEntry, err := fetchAndProcess(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -862,26 +867,46 @@ func HandleNumberCancel(c echo.Context) error {
 }
 
 // Helper functions
-func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, models.TransactionHistory, error) {
+func fetchAndProcess(apiURL, server, id string, db *mongo.Database, headers map[string]string) (bool, models.TransactionHistory, error) {
+	logs.Logger.Info(apiURL)
 	var existingEntry models.TransactionHistory
 	otpReceived := false
 
-	resp, err := http.Get(apiURL)
+	client := &http.Client{}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return false, existingEntry, fmt.Errorf("failed to create API request: %w", err)
+	}
+
+	// Add headers to the request
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	// Execute the request
+	resp, err := client.Do(req)
 	if err != nil {
 		return false, existingEntry, fmt.Errorf("failed to fetch API: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return false, existingEntry, errors.New("error occurred during API request")
-	}
-
+	// Read the response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return false, existingEntry, fmt.Errorf("failed to read response body: %w", err)
 	}
-	responseData := string(body)
 
+	responseData := string(body)
+	logs.Logger.Error(responseData)
+
+	// // Check for non-200 status code
+	// if resp.StatusCode != http.StatusOK {
+	// 	return false, existingEntry, fmt.Errorf("error occurred during API request: %s", resp.Status)
+	// }
+
+	// Check if the response data is empty
 	if strings.TrimSpace(responseData) == "" {
 		return false, existingEntry, errors.New("received empty response data")
 	}
@@ -912,12 +937,13 @@ func fetchAndProcess(apiURL, server, id string, db *mongo.Database) (bool, model
 			if err != nil && err != mongo.ErrNoDocuments {
 				return false, existingEntry, err
 			}
+		} else if responseDataJSON["status"] == "order has sms" {
+			otpReceived = true
+			return true, existingEntry, nil
 		} else {
 			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
-		if responseDataJSON["status"] == "order has sms" {
-			otpReceived = true
-		}
+
 	case "3":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "ALREADY_CANCELLED") ||
 			strings.HasPrefix(responseData, "ACCESS_ACTIVATION") {

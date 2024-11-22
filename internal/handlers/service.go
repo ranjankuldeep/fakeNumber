@@ -621,6 +621,41 @@ func searchCodes(codes []string, db *mongo.Database) ([]string, error) {
 
 	return results, nil
 }
+
+func HandleCancelOrder(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	id := c.QueryParam("id")
+	userId := c.QueryParam("userId")
+	if id == "" {
+		fmt.Println("ERROR: id is missing")
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "id is required"})
+	}
+
+	userObjectID, err := primitive.ObjectIDFromHex(userId)
+	if err != nil {
+		fmt.Println("ERROR: Invalid userId format:", err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
+	}
+
+	orderCollection := models.InitializeOrderCollection(db)
+	filter := bson.M{
+		"userId":   userObjectID,
+		"numberId": id,
+	}
+
+	deleteResult, err := orderCollection.DeleteOne(context.TODO(), filter)
+	if err != nil {
+		fmt.Println("ERROR: Unable to delete the order:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to cancel the order"})
+	}
+
+	if deleteResult.DeletedCount == 0 {
+		fmt.Println("ERROR: No matching order found to delete")
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "No matching order found"})
+	}
+	return c.JSON(http.StatusOK, echo.Map{"message": "Order canceled successfully"})
+}
+
 func HandleCheckOTP(c echo.Context) error {
 	otp := c.QueryParam("otp")
 	apiKey := c.QueryParam("api_key")

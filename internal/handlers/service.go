@@ -734,18 +734,36 @@ func HandleNumberCancel(c echo.Context) error {
 	if server == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
 	}
+
 	db := c.Get("db").(*mongo.Database)
+	var existingOrder models.Order
+	orderCollection := models.InitializeOrderCollection(db)
+	err := orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "COULDN'T FETCH EXISTING ORDER"})
+	}
+
+	timeDifference := time.Now().Sub(existingOrder.OrderTime)
+	if timeDifference < 2*time.Minute {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "wait 2 mints before cancel"})
+	}
+
+	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "under maintenance"})
+	}
+
+	// check if otp came or not by looping thourh all transactions data
 
 	var apiWalletUser models.ApiWalletUser
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
-	err := apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	err = apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
 	}
 
 	var order models.Order
-	orderCollection := models.InitializeOrderCollection(db)
 	err = orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&order)
 	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
@@ -760,26 +778,18 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "USER_NOT_FOUND"})
 	}
 
-	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
-	if err != nil {
+	var transactionData models.TransactionHistory
+	transactionCollection := models.InitializeTransactionHistoryCollection(db)
+	err = transactionCollection.FindOne(ctx, bson.M{"userId": apiWalletUser.UserID.Hex(), "id": id}).Decode(&transactionData)
+	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "TRANSACTION_HISTORY_NOT_FOUND"})
 	}
-	logs.Logger.Info(serverData)
 
 	constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, order.Number)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
-	}
-
-	var transactionData models.TransactionHistory
-	transactionCollection := models.InitializeTransactionHistoryCollection(db)
-
-	err = transactionCollection.FindOne(ctx, bson.M{"userId": apiWalletUser.UserID.Hex(), "id": id}).Decode(&transactionData)
-	if err != nil || err == mongo.ErrEmptySlice {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "TRANSACTION_HISTORY_NOT_FOUND"})
 	}
 
 	// if otp recieved
@@ -799,248 +809,185 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"msg": "NUMBER_ALREADY_CANCELLED"})
 	}
 
-	// if no otp recieved and status is not cancelled then cancel from the third pary server and refund the balance
-	_, existingEntry, err := fetchAndProcess(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
+	err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	// if no existing entry found with status cancelled then make a new transaction with status cancelled.
-	if existingEntry.ID.Hex() == "" || existingEntry.Status == "" {
-		var transaction models.TransactionHistory
-		formattedData := formatDateTime()
+	var transaction models.TransactionHistory
+	formattedData := formatDateTime()
 
-		err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	numberHistory := models.TransactionHistory{
+		UserID:        transaction.UserID,
+		Service:       transaction.Service,
+		Price:         transaction.Price,
+		Server:        server,
+		TransactionID: id,
+		OTP:           "",
+		Status:        "CANCELLED",
+		Number:        transaction.Number,
+		DateTime:      formattedData,
+	}
+
+	_, err = transactionCollection.InsertOne(ctx, numberHistory)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	price, err := strconv.ParseFloat(transaction.Price, 64)
+	newBalance := apiWalletUser.Balance + price
+	newBalance = math.Round(newBalance*100) / 100
+
+	if transaction.OTP == "" {
+		update := bson.M{
+			"$set": bson.M{"balance": newBalance},
+		}
+		filter := bson.M{"_id": apiWalletUser.UserID}
+
+		_, err = apiWalletColl.UpdateOne(ctx, filter, update)
 		if err != nil {
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
+	}
+	ipDetails, err := utils.GetIpDetails(c)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
+	}
+	services.NumberCancelDetails(user.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
 
-		numberHistory := models.TransactionHistory{
-			UserID:        transaction.UserID,
-			Service:       transaction.Service,
-			Price:         transaction.Price,
-			Server:        server,
-			TransactionID: id,
-			OTP:           "",
-			Status:        "CANCELLED",
-			Number:        transaction.Number,
-			DateTime:      formattedData,
-		}
-
-		_, err = transactionCollection.InsertOne(ctx, numberHistory)
-		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		}
-
-		price, err := strconv.ParseFloat(transaction.Price, 64)
-		newBalance := apiWalletUser.Balance + price
-		newBalance = math.Round(newBalance*100) / 100
-
-		if transaction.OTP == "" {
-			update := bson.M{
-				"$set": bson.M{"balance": newBalance},
-			}
-			filter := bson.M{"_id": apiWalletUser.UserID}
-
-			_, err = apiWalletColl.UpdateOne(ctx, filter, update)
-			if err != nil {
-				logs.Logger.Error(err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			}
-		}
-		ipDetails, err := utils.GetIpDetails(c)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
-		}
-		services.NumberCancelDetails(user.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
-
-		_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
-		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_ENTRY_NOT_FOUND"})
-		}
+	_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_ENTRY_NOT_FOUND"})
 	}
 	return nil
 }
 
-// Helper functions
-func fetchAndProcess(apiURL, server, id string, db *mongo.Database, headers map[string]string) (bool, models.TransactionHistory, error) {
-	logs.Logger.Info(apiURL)
-	var existingEntry models.TransactionHistory
-	otpReceived := false
-
+func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, headers map[string]string) error {
+	logs.Logger.Infof("Number Cancel URL: %s", apiURL)
 	client := &http.Client{}
 
-	// Create a new HTTP request
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return false, existingEntry, fmt.Errorf("failed to create API request: %w", err)
+		return fmt.Errorf("failed to create API request: %w", err)
 	}
-
-	// Add headers to the request
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
-
-	// Execute the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, existingEntry, fmt.Errorf("failed to fetch API: %w", err)
+		return fmt.Errorf("failed to fetch API: %w", err)
 	}
 	defer resp.Body.Close()
-
-	// Read the response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return false, existingEntry, fmt.Errorf("failed to read response body: %w", err)
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
-
 	responseData := string(body)
 	logs.Logger.Error(responseData)
-
-	// // Check for non-200 status code
-	// if resp.StatusCode != http.StatusOK {
-	// 	return false, existingEntry, fmt.Errorf("error occurred during API request: %s", resp.Status)
-	// }
-
-	// Check if the response data is empty
 	if strings.TrimSpace(responseData) == "" {
-		return false, existingEntry, errors.New("received empty response data")
+		return errors.New("RECEIVED_EMTPY_RESPONSE_FROM_THIRD_PARTY_SERVER")
 	}
-	collection := models.InitializeTransactionHistoryCollection(db)
 
 	switch server {
 	case "1":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				return false, existingEntry, err
-			}
-		} else {
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+			return nil
+		} else if strings.HasPrefix(responseData, "ACCESS_APPROVED") {
+			return nil
+		} else if strings.HasPrefix(responseData, "ACCESS_CANCEL_ALREADY") {
+			return nil
 		}
-		if strings.HasPrefix(responseData, "ACCESS_APPROVED") {
-			otpReceived = true
-		}
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 
 	case "2":
 		var responseDataJSON map[string]interface{}
 		err = json.Unmarshal(body, &responseDataJSON)
 		if err != nil {
-			return false, existingEntry, fmt.Errorf("failed to parse JSON response: %w", err)
+			return fmt.Errorf("failed to parse JSON response: %w", err)
 		}
 		if responseDataJSON["status"] == "CANCELED" {
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				return false, existingEntry, err
-			}
+			return nil
 		} else if responseDataJSON["status"] == "order has sms" {
-			otpReceived = true
-			return true, existingEntry, nil
-		} else {
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+			return nil
+		} else if responseDataJSON["status"] == "order not found" {
+			return nil
 		}
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
 
 	case "3":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "ALREADY_CANCELLED") ||
 			strings.HasPrefix(responseData, "ACCESS_ACTIVATION") {
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				return false, existingEntry, err
-			}
+			return nil
 		} else {
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+			return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
-
-	case "4", "5", "6":
-		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_STATUS") ||
-			strings.HasPrefix(responseData, "BAD_ACTION") || strings.HasPrefix(responseData, "NO_ACTIVATION") {
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				return false, existingEntry, err
-			}
-		} else {
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
+	case "4":
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
+			return nil
+		} else if strings.HasPrefix(responseData, "EARLY_CANCEL_DENIED") {
+			return errors.New("EARLY_CANCEL_DENIED")
+		} else if strings.HasPrefix(responseData, "BAD_STATUS") {
+			return nil
 		}
-
-	case "7", "8":
-		var responseDataJSON map[string]interface{}
-		fmt.Println("Debug: Received response body for server 7 or 8:", string(body))
-
-		err = json.Unmarshal(body, &responseDataJSON)
-		if err != nil {
-			fmt.Printf("Debug: Failed to parse JSON response: %s\n", string(body))
-			return false, existingEntry, fmt.Errorf("failed to parse JSON response: %w", err)
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
+	case "5":
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_ACTION") {
+			return nil
 		}
-
-		fmt.Println("Debug: Parsed JSON response successfully:", responseDataJSON)
-
-		// Check if the "success" field exists and is a boolean
-		success, ok := responseDataJSON["success"].(bool)
-		if ok && success {
-			fmt.Println("Debug: Success field found and true. Checking for CANCELLED entry in the database.")
-
-			// Find the entry in the database
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				fmt.Printf("Debug: Error finding entry in the database for id=%s: %v\n", id, err)
-				return false, existingEntry, err
-			}
-
-			// If no document is found, log for debugging
-			if err == mongo.ErrNoDocuments {
-				fmt.Printf("Debug: No CANCELLED entry found for id=%s in the database.\n", id)
-			} else {
-				fmt.Printf("Debug: Found CANCELLED entry for id=%s: %+v\n", id, existingEntry)
-			}
-		} else {
-			// Log error details if the "success" field is not as expected
-			fmt.Printf("Debug: 'success' field missing or false in response: %v\n", responseDataJSON)
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
+	case "6":
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "NO_ACTIVATION") {
+			return nil
 		}
-
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+	case "8":
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_STATUS") {
+			return nil
+		}
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+	case "7":
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_STATUS") {
+			return nil
+		}
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	case "9":
 		if strings.HasPrefix(responseData, "success") {
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				return false, existingEntry, err
-			}
-		} else {
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+			return nil
 		}
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	case "10":
-		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				return false, existingEntry, err
-			}
-		} else {
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "ACCESS_CANCEL") {
+			return nil
 		}
-
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	case "11":
 		var responseDataJSON map[string]interface{}
 		err = json.Unmarshal(body, &responseDataJSON)
 		if err != nil {
-			return false, existingEntry, fmt.Errorf("failed to parse JSON response: %w", err)
+			return fmt.Errorf("failed to parse JSON response: %w", err)
 		}
-
 		if success, ok := responseDataJSON["success"].(bool); ok && success {
-			err = collection.FindOne(context.TODO(), bson.M{"id": id, "status": "CANCELLED"}).Decode(&existingEntry)
-			if err != nil && err != mongo.ErrNoDocuments {
-				return false, existingEntry, err
-			}
-		} else {
-			return false, existingEntry, errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+			return nil
+		} else if responseDataJSON["error_code"] == "change_status" {
+			return nil
 		}
-		break
+		errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	default:
-		return false, existingEntry, errors.New("invalid server value")
+		return errors.New("INVALID_SERVER_VALUE")
 	}
-	return otpReceived, existingEntry, nil
+	return nil
 }
 
 func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, server string) (models.Server, error) {

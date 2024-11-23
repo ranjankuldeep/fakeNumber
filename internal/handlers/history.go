@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -168,11 +169,32 @@ func SaveRechargeHistory(c echo.Context) error {
 		log.Println("[ERROR] Database error while checking transaction:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
+	log.Printf("[DEBUG] Updating balance for userId: %s with amount: %.2f", request.UserID, requestAmountFloat)
+
+	// Convert UserID to ObjectId
+	userObjectID, err := primitive.ObjectIDFromHex(request.UserID)
+	fmt.Println("userObjectID", userObjectID)
+	if err != nil {
+		log.Println("[ERROR] Invalid userId format:", request.UserID)
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
+	}
+
+	// Fetch user's wallet
+	var userWallet models.ApiWalletUser
+	err = apiWalletCol.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&userWallet)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Println("[ERROR] User not found:", request.UserID)
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "User not found"})
+		}
+		log.Println("[ERROR] Database error while fetching user wallet:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
 
 	// Update balance if status is "Received"
 	if request.Status == "Received" {
 		_, err := apiWalletCol.UpdateOne(ctx,
-			bson.M{"userId": request.UserID},
+			bson.M{"userId": userObjectID},
 			bson.M{"$inc": bson.M{"balance": requestAmountFloat}}, // Use the parsed float for the update
 		)
 		if err != nil {
@@ -180,7 +202,6 @@ func SaveRechargeHistory(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update balance"})
 		}
 	}
-
 	// Save recharge history
 	rechargeHistory := models.RechargeHistory{
 		UserID:        request.UserID,

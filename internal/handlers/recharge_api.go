@@ -1,20 +1,146 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/internal/utils"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// RechargeUpiApi handles UPI recharge transactions.
+// Models
+type UpiRequest struct {
+	TransactionId string `json:"transactionId"`
+	UserId        string `json:"userId"`
+	Email         string `json:"email"`
+}
+
+type UpiResponse struct {
+	Error  bool   `json:"error"`
+	Amount int    `json:"amount"`
+	TxnId  string `json:"txnid"`
+}
+
+type IpDetails struct {
+	City            string `json:"city"`
+	State           string `json:"state"`
+	Pincode         string `json:"pincode"`
+	Country         string `json:"country"`
+	ServiceProvider string `json:"serviceProvider"`
+	IP              string `json:"ip"`
+}
+
+// RechargeUpiApi handles the UPI recharge request
 func RechargeUpiApi(c echo.Context) error {
-	// Logic for handling UPI recharge transactions
-	return c.JSON(http.StatusOK, map[string]string{"message": "UPI transaction processed successfully"})
+	ctx := context.Background()
+
+	// Get query parameters
+	transactionId := c.QueryParam("transactionId")
+	userId := c.QueryParam("userId")
+	email := c.QueryParam("email")
+
+	if userId == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_USER_ID"})
+	}
+
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_EMAIL"})
+	}
+
+	db := c.Get("db").(*mongo.Database)
+
+	// Check server maintenance
+	// Check server maintenance
+	// serverCollection := db.Collection("servers")
+	// var serverData bson.M
+	// if err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&serverData); err != nil {
+	// 	logs.Logger.Error(err)
+	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch server data"})
+	// }
+
+	// if serverData["maintainance"].(bool) {
+	// 	return c.JSON(http.StatusForbidden, map[string]string{"error": "Site is under maintenance."})
+	// }
+
+	// Check recharge maintenance
+	var rechargeData models.RechargeAPI
+	rechargeCollection := models.InitializeRechargeAPICollection(db)
+
+	if err := rechargeCollection.FindOne(ctx, bson.M{"recharge_type": "upi"}).Decode(&rechargeData); err != nil {
+		log.Println("Recharge data fetch error:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+
+	if rechargeData.Maintenance {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "UPI recharge is under maintenance."})
+	}
+
+	// Fetch transaction details
+	upiUrl := fmt.Sprintf("https://own5k.in/p/u.php?txn%s", transactionId)
+	resp, err := http.Get(upiUrl)
+	if err != nil {
+		log.Println("UPI API error:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+	defer resp.Body.Close()
+	//log the upi response
+	log.Println("UPI response:", resp.Body)
+
+	var upiData UpiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&upiData); err != nil {
+		log.Println("UPI response parse error:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
+	}
+
+	if upiData.Error {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
+	}
+
+	if upiData.Amount < 50 {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Minimum amount is less than ₹50, No refund."})
+	}
+
+	// Save recharge history
+	rechargeHistoryUrl := fmt.Sprintf("%s/api/save-recharge-history", os.Getenv("BASE_API_URL"))
+	rechargePayload := map[string]interface{}{
+		"userId":         userId,
+		"transaction_id": upiData.TxnId,
+		"amount":         upiData.Amount,
+		"payment_type":   "upi",
+		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
+		"status":         "Received",
+	}
+	rechargePayloadBytes, _ := json.Marshal(rechargePayload)
+
+	rechargeResp, err := http.Post(rechargeHistoryUrl, "application/json", bytes.NewReader(rechargePayloadBytes))
+	if err != nil || rechargeResp.StatusCode != http.StatusOK {
+		log.Println("Recharge history save error:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save recharge history."})
+	}
+
+	// Fetch IP details
+	ipDetails, err := utils.GetIpDetails(c)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// Respond to client
+	return c.JSON(http.StatusOK, map[string]string{
+		"message":   fmt.Sprintf("%d₹ Added Successfully!", upiData.Amount),
+		"ipDetails": ipDetails,
+	})
 }
 
 // RechargeTrxApi handles TRX recharge transactions.

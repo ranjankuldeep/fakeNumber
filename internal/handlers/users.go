@@ -150,7 +150,7 @@ func SignUp(c echo.Context) error {
 	}
 	if !isAllowed {
 		log.Printf("ERROR: Email domain '%s' is not allowed\n", emailDomain)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Use Valid Email"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Use a valid email"})
 	}
 	log.Println("INFO: Email domain is allowed")
 
@@ -167,22 +167,9 @@ func SignUp(c echo.Context) error {
 	}
 	log.Println("INFO: CAPTCHA verification successful")
 
-	// Check if the email already exists in the database
-	log.Println("INFO: Checking if email already exists in the database")
-	existingUser, err := findUserByEmail(req.Email) // Stub function to simulate DB lookup
-	if err != nil {
-		log.Println("ERROR: Error checking email existence:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
-	}
-	if existingUser != nil {
-		log.Printf("ERROR: Email '%s' already exists\n", req.Email)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Email already exists"})
-	}
-	log.Println("INFO: Email does not exist in the database")
-
 	// Generate and send OTP
 	log.Println("INFO: Generating OTP")
-	otp, err := generateOTP() // Handle multiple return values
+	otp, err := generateOTP()
 	if err != nil {
 		log.Println("ERROR: Failed to generate OTP:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to generate OTP"})
@@ -209,7 +196,7 @@ func SignUp(c echo.Context) error {
 
 	// Respond with success
 	log.Println("INFO: Returning success response")
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, echo.Map{
 		"status":  "PENDING",
 		"message": "Verification OTP sent.",
 		"email":   req.Email,
@@ -1274,6 +1261,7 @@ func VerifyOTP(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	userCol := models.InitializeUserCollection(db)
 	otpCol := db.Collection("otp")
+	apiWalletCol := models.InitializeApiWalletuserCollection(db)
 
 	type RequestBody struct {
 		Email    string `json:"email"`
@@ -1341,6 +1329,27 @@ func VerifyOTP(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to register user"})
 	}
 
+	// Generate API key and TRON wallet
+	apiKey := generateAPIKey()
+	trxPrivateKey, trxAddress, err := services.GenerateTronAddress()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to generate TRON wallet"})
+	}
+
+	// Create a new API wallet entry
+	apiWallet := models.ApiWalletUser{
+		UserID:        newUser.ID,
+		APIKey:        apiKey,
+		Balance:       0,
+		TRXAddress:    trxAddress,
+		TRXPrivateKey: trxPrivateKey,
+	}
+	_, err = apiWalletCol.InsertOne(ctx, apiWallet)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create wallet"})
+	}
+
+	// Respond with the original success response
 	return c.JSON(http.StatusOK, echo.Map{
 		"status":  "VERIFIED",
 		"message": "User registered successfully",

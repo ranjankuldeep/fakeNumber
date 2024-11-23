@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
@@ -27,9 +27,10 @@ type UpiRequest struct {
 }
 
 type UpiResponse struct {
-	Error  bool   `json:"error"`
-	Amount int    `json:"amount"`
-	TxnId  string `json:"txnid"`
+	Name   string `json:"name,omitempty"`
+	Amount int    `json:"amount,omitempty"`
+	Date   string `json:"date,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 type IpDetails struct {
@@ -74,14 +75,6 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "UPI recharge is under maintenance."})
 	}
 
-	// Check if transaction ID is already present
-	rechargeHistoryCollection := db.Collection("recharge_histories") // Replace with your collection name
-	var existingRecharge bson.M
-	if err := rechargeHistoryCollection.FindOne(ctx, bson.M{"transaction_id": transactionId}).Decode(&existingRecharge); err == nil {
-		// If the document is found, return an error
-		return c.JSON(http.StatusConflict, map[string]string{"error": "Transaction ID already exists. Duplicate submission is not allowed."})
-	}
-
 	// Fetch transaction details
 	upiUrl := fmt.Sprintf("https://own5k.in/p/u.php?txn=%s", transactionId)
 	resp, err := http.Get(upiUrl)
@@ -97,31 +90,55 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
 	}
 
-	if upiData.Error {
+	// Handle error in UPI response
+	if upiData.Error != "" {
+		log.Println("UPI API returned error:", upiData.Error)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
 	}
 
-	if upiData.Amount < 50 {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "Minimum amount is less than ₹50, No refund."})
-	}
-
-	// Save recharge history
-	rechargeHistoryUrl := fmt.Sprintf("%s/api/save-recharge-history", os.Getenv("BASE_API_URL"))
+	// Prepare payload for SaveRechargeHistory
+	rechargeHistoryUrl := fmt.Sprintf("%sapi/save-recharge-history", os.Getenv("BASE_API_URL"))
 	rechargePayload := map[string]interface{}{
 		"userId":         userId,
-		"transaction_id": upiData.TxnId,
+		"transaction_id": transactionId,
 		"amount":         upiData.Amount,
 		"payment_type":   "upi",
-		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
+		"date_time":      upiData.Date,
 		"status":         "Received",
 	}
 	rechargePayloadBytes, _ := json.Marshal(rechargePayload)
 
+	// Log the payload being sent
+	log.Printf("[INFO] Sending recharge history payload: %s", string(rechargePayloadBytes))
+
 	rechargeResp, err := http.Post(rechargeHistoryUrl, "application/json", bytes.NewReader(rechargePayloadBytes))
-	if err != nil || rechargeResp.StatusCode != http.StatusOK {
-		log.Println("Recharge history save error:", err)
+	if err != nil {
+		log.Printf("[ERROR] Recharge history save error: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save recharge history."})
 	}
+	defer rechargeResp.Body.Close()
+
+	// Log the response status and body
+	responseBody, _ := ioutil.ReadAll(rechargeResp.Body)
+	log.Printf("[INFO] Recharge history save response status: %d", rechargeResp.StatusCode)
+	log.Printf("[INFO] Recharge history save response body: %s", string(responseBody))
+
+	if rechargeResp.StatusCode == http.StatusBadRequest {
+		// Extract error message from the SaveRechargeHistory API response
+		var errorResponse map[string]string
+		if err := json.Unmarshal(responseBody, &errorResponse); err != nil {
+			log.Printf("[ERROR] Failed to parse error response: %v", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to process recharge history response."})
+		}
+		return c.JSON(http.StatusBadRequest, errorResponse) // Return the exact error to the client
+	}
+
+	if rechargeResp.StatusCode != http.StatusOK {
+		log.Printf("[ERROR] Recharge history save failed with status: %d, body: %s", rechargeResp.StatusCode, string(responseBody))
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save recharge history."})
+	}
+
+	log.Println("[INFO] Recharge history saved successfully")
 
 	// Fetch IP details
 	ipDetails, err := utils.GetIpDetails(c)

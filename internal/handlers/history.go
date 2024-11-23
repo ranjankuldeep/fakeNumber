@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -93,64 +95,94 @@ func GetTransactionHistory(c echo.Context) error {
 
 // Handler to save a recharge history entry
 func SaveRechargeHistory(c echo.Context) error {
+	fmt.Println("SaveRechargeHistory")
+
+	// Get MongoDB collections
 	db := c.Get("db").(*mongo.Database)
 	rechargeHistoryCol := models.InitializeRechargeHistoryCollection(db)
 	apiWalletCol := models.InitializeApiWalletuserCollection(db)
 
+	// Request payload structure
 	var request struct {
-		UserID        string `json:"userId"`
-		TransactionID string `json:"transaction_id"`
-		Amount        string `json:"amount"`
-		PaymentType   string `json:"payment_type"`
-		DateTime      string `json:"date_time"`
-		Status        string `json:"status"`
+		UserID        string      `json:"userId"`
+		TransactionID string      `json:"transaction_id"`
+		Amount        json.Number `json:"amount"` // Use json.Number for flexible type handling
+		PaymentType   string      `json:"payment_type"`
+		DateTime      string      `json:"date_time"`
+		Status        string      `json:"status"`
 	}
-	requestAmountInt, _ := strconv.Atoi(request.Amount)
+
+	// Bind request payload
 	if err := c.Bind(&request); err != nil {
+		log.Println("[ERROR] Invalid request body:", err)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
 	}
 
-	if request.UserID == "" || request.TransactionID == "" || requestAmountInt == 0 || request.PaymentType == "" || request.DateTime == "" || request.Status == "" {
+	// Validate required fields
+	if request.UserID == "" || request.TransactionID == "" || request.Amount.String() == "" ||
+		request.PaymentType == "" || request.DateTime == "" || request.Status == "" {
+		log.Println("[ERROR] Missing required fields in request body")
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
 	}
+
+	// Validate amount
+	requestAmountInt, err := request.Amount.Int64()
+	if err != nil || requestAmountInt <= 0 {
+		log.Println("[ERROR] Invalid amount:", request.Amount.String())
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid amount"})
+	}
+
+	// Format date_time
+	const dateTimeFormat = "01/02/2006T03:04:05 PM"
+	parsedTime, err := time.Parse("2006-01-02 03:04:05 PM", request.DateTime)
+	if err != nil {
+		log.Println("[ERROR] Invalid date_time format:", request.DateTime)
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid date_time format"})
+	}
+	formattedDateTime := parsedTime.Format(dateTimeFormat)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Check if the transaction already exists
 	var existingTransaction models.RechargeHistory
-	err := rechargeHistoryCol.FindOne(ctx, bson.M{"transaction_id": request.TransactionID}).Decode(&existingTransaction)
+	err = rechargeHistoryCol.FindOne(ctx, bson.M{"transaction_id": request.TransactionID}).Decode(&existingTransaction)
 	if err == nil {
+		log.Println("[ERROR] Transaction already exists:", request.TransactionID)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Transaction already done"})
+	} else if err != mongo.ErrNoDocuments {
+		log.Println("[ERROR] Database error while checking transaction:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
 
 	// Update balance if status is "Received"
 	if request.Status == "Received" {
-		var apiWallet models.ApiWalletUser
-		err := apiWalletCol.FindOne(ctx, bson.M{"userId": request.UserID}).Decode(&apiWallet)
+		_, err := apiWalletCol.UpdateOne(ctx,
+			bson.M{"userId": request.UserID},
+			bson.M{"$inc": bson.M{"balance": float64(requestAmountInt)}},
+		)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "User not found"})
+			log.Println("[ERROR] Failed to update user balance:", err)
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update balance"})
 		}
-
-		requestAmountInt, _ := strconv.Atoi(request.Amount)
-		apiWallet.Balance += float64(requestAmountInt)
-		apiWalletCol.UpdateOne(ctx, bson.M{"userId": request.UserID}, bson.M{"$set": bson.M{"balance": apiWallet.Balance}})
 	}
 
 	// Save recharge history
 	rechargeHistory := models.RechargeHistory{
 		UserID:        request.UserID,
 		TransactionID: request.TransactionID,
-		Amount:        request.Amount,
+		Amount:        request.Amount.String(),
 		PaymentType:   request.PaymentType,
-		DateTime:      request.DateTime,
+		DateTime:      formattedDateTime, // Save formatted date_time
 		Status:        request.Status,
 	}
 	_, err = rechargeHistoryCol.InsertOne(ctx, rechargeHistory)
 	if err != nil {
+		log.Println("[ERROR] Failed to save recharge history:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to save recharge"})
 	}
 
+	log.Println("[INFO] Recharge saved successfully for transaction:", request.TransactionID)
 	return c.JSON(http.StatusOK, echo.Map{"message": "Recharge Saved Successfully!"})
 }
 

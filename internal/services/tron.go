@@ -1,75 +1,46 @@
 package services
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
-
-	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 )
 
-type ResponseData struct {
-	EncryptedPrivateKey string `json:"encryptedPrivateKey"`
-	IV                  string `json:"iv"`
-	Address             string `json:"address"`
+// TronAddressResponse represents the structure of the response from the Tron address API
+type TronAddressResponse struct {
+	Address    string `json:"address"`
+	PrivateKey string `json:"privatekey"`
 }
 
+// GenerateTronAddress fetches a Tron address and private key from the given API
 func GenerateTronAddress() (string, string, error) {
-	baseTronServerUrl := os.Getenv("TRON_SERVER_BASE_URL")
-	expressServerURL := fmt.Sprintf("%s/api/internal/generate-tron-address", baseTronServerUrl) // Replace with your actual Express server URL
+	apiURL := "https://own5k.in/tron/?type=address"
 
-	// Example payload for the request (modify as needed)
-	payload := map[string]string{
-		"clientId": "example-client-id", // Example of extra data (modify or remove if not required)
-	}
-
-	// Convert payload to JSON
-	requestBody, err := json.Marshal(payload)
+	// Make the HTTP GET request
+	resp, err := http.Get(apiURL)
 	if err != nil {
-		fmt.Println("Error marshaling payload:", err)
-		return "", "", errors.New("cannot marshal the payload")
-	}
-
-	// Make the HTTP POST request
-	resp, err := http.Post(expressServerURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		fmt.Println("Error making POST request:", err)
-		return "", "", errors.New("Error making post request")
+		return "", "", fmt.Errorf("failed to fetch Tron address: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Check for a non-200 status code
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Received non-OK response: %d\n", resp.StatusCode)
-		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Println("Response body:", string(body))
-		return "", "", errors.New("RESPONSE STATUS INVALID")
+		return "", "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
+	// Read the response body
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response body:", err)
-		return "", "", errors.New("EMPTY RESPONSE BODY")
+		return "", "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	var responseData ResponseData
-	err = json.Unmarshal(body, &responseData)
-	if err != nil {
-		fmt.Println("Error unmarshaling response body:", err)
-		return "", "", errors.New("CANNOT UNMARSHAL RESPONSE")
+	// Parse the JSON response
+	var tronAddress TronAddressResponse
+	if err := json.Unmarshal(body, &tronAddress); err != nil {
+		return "", "", fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
-	secretKey := os.Getenv("TRON_SECRET_KEY")
-	privateKey := responseData.EncryptedPrivateKey
-	walletAddress := responseData.Address
-	vectorHash := responseData.IV
-
-	decryptedPrivateKey, err := utils.Decrypt(privateKey, vectorHash, secretKey)
-	if err != nil {
-		return "", "", err
-	}
-	return decryptedPrivateKey, walletAddress, nil
+	// Return the address and private key
+	return tronAddress.PrivateKey, tronAddress.Address, nil
 }

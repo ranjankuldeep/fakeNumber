@@ -976,7 +976,7 @@ func GetUserBalance(userID string, walletCol *mongo.Collection) (float64, error)
 func GetAllUsers(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	userCol := db.Collection("users")
-	walletCol := db.Collection("wallets")
+	walletCol := db.Collection("apikey_and_balances")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

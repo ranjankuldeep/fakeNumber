@@ -259,7 +259,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 
 	// Deduct balance and save to DB
 	newBalance := apiWalletUser.Balance - price
-	_, err = apiWalletUserCollection.UpdateOne(ctx, bson.M{"_id": user.ID}, bson.M{"$set": bson.M{"balance": newBalance}})
+	_, err = apiWalletUserCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": newBalance}})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_UPDATE_USER_BALANCE"})
 	}
@@ -730,6 +730,7 @@ func HandleCancelOrder(c echo.Context) error {
 }
 
 func HandleCheckOTP(c echo.Context) error {
+	fmt.Println("DEBUG: Received request to check OTP")
 	otp := c.QueryParam("otp")
 	apiKey := c.QueryParam("api_key")
 	fmt.Println("DEBUG: Received request with OTP:", otp, "and API Key:", apiKey)

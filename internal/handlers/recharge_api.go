@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
@@ -156,25 +159,177 @@ func RechargeUpiApi(c echo.Context) error {
 
 // RechargeTrxApi handles TRX recharge transactions.
 func RechargeTrxApi(c echo.Context) error {
-	// Logic for handling TRX recharge transactions
-	return c.JSON(http.StatusOK, map[string]string{"message": "TRX transaction processed successfully"})
+	log.Println("INFO: RechargeTrxApi endpoint invoked")
+
+	// ctx := context.Background()
+
+	// Get query parameters
+	address := c.QueryParam("address")
+	hash := c.QueryParam("hash")
+	userId := c.QueryParam("userId")
+	exchangeRateStr := c.QueryParam("exchangeRate")
+	email := c.QueryParam("email")
+
+	// Validate input parameters
+	if address == "" || hash == "" || userId == "" || exchangeRateStr == "" || email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Missing required query parameters",
+		})
+	}
+
+	// Parse exchange rate to float
+	exchangeRate, err := strconv.ParseFloat(exchangeRateStr, 64)
+	if err != nil {
+		log.Println("ERROR: Invalid exchange rate:", err)
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid exchange rate",
+		})
+	}
+
+	// Get MongoDB database instance
+	// db := c.Get("db").(*mongo.Database)
+
+	// Commenting out the recharge maintenance check
+	/*
+		var rechargeData models.RechargeAPI
+		rechargeCollection := models.InitializeRechargeAPICollection(db)
+		if err := rechargeCollection.FindOne(ctx, bson.M{"recharge_type": "trx"}).Decode(&rechargeData); err != nil {
+			log.Println("ERROR: Failed to fetch recharge data:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Internal server error",
+			})
+		}
+		if rechargeData.Maintenance {
+			return c.JSON(http.StatusForbidden, map[string]string{
+				"error": "TRX recharge is under maintenance",
+			})
+		}
+	*/
+
+	// Fetch transaction data
+	trxApiURL := fmt.Sprintf("https://own5k.in/tron/?type=txnid&address=%s&hash=%s", address, hash)
+	resp, err := http.Get(trxApiURL)
+	if err != nil {
+		log.Println("ERROR: Failed to fetch TRX transaction data:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Internal server error",
+		})
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Println("ERROR: TRX transaction API returned non-200 status code:", resp.StatusCode)
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Transaction not found",
+		})
+	}
+
+	// Parse TRX transaction response
+	var trxData struct {
+		TRX float64 `json:"trx"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&trxData); err != nil {
+		log.Println("ERROR: Failed to decode TRX transaction response:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to process transaction data",
+		})
+	}
+
+	// Check transaction amount
+	if trxData.TRX <= 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid TRX transaction",
+		})
+	}
+
+	// Calculate amount in INR
+	price := trxData.TRX * exchangeRate
+
+	// Save recharge history
+	rechargeHistoryPayload := map[string]interface{}{
+		"userId":         userId,
+		"transaction_id": hash,
+		"amount":         fmt.Sprintf("%.2f", price),
+		"payment_type":   "trx",
+		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
+		"status":         "Received",
+	}
+	payloadBytes, _ := json.Marshal(rechargeHistoryPayload)
+
+	rechargeHistoryURL := fmt.Sprintf("%sapi/save-recharge-history", os.Getenv("BASE_API_URL"))
+	rechargeResp, err := http.Post(rechargeHistoryURL, "application/json", bytes.NewReader(payloadBytes))
+	if err != nil {
+		log.Println("ERROR: Failed to save recharge history:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to save recharge history",
+		})
+	}
+	defer rechargeResp.Body.Close()
+
+	if rechargeResp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(rechargeResp.Body)
+		log.Printf("ERROR: Failed to save recharge history. Response: %s", string(body))
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to save recharge history",
+		})
+	}
+
+	// Log recharge success
+	log.Println("INFO: Recharge history saved successfully for hash:", hash)
+
+	// Fetch IP details
+	ipDetails, err := utils.GetIpDetails(c)
+	if err != nil {
+		log.Println("ERROR: Failed to fetch IP details:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to fetch IP details",
+		})
+	}
+
+	// Respond to client
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
+		"ipDetails": ipDetails,
+	})
 }
 
 // ExchangeRate handles exchange rate queries.
+
+// ExchangeRate fetches the exchange rate and returns it as-is
 func ExchangeRate(c echo.Context) error {
 	log.Println("INFO: ExchangeRate endpoint invoked")
 
-	// Simulate logic for retrieving exchange rates
-	log.Println("INFO: Attempting to retrieve exchange rates")
+	// URL for the external API providing exchange rates
+	apiURL := "https://own5k.in/p/trxprice.php" // Replace with the actual API URL
 
-	// Here you can add the actual logic to fetch exchange rates
-	// Example: Call an external API or fetch data from a database
+	// Make an HTTP GET request to the external API
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch exchange rate: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to retrieve exchange rate",
+		})
+	}
+	defer resp.Body.Close()
 
-	// If successful
-	log.Println("INFO: Exchange rates retrieved successfully")
+	// Check for non-200 status codes
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("ERROR: Received non-200 status code: %d", resp.StatusCode)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to retrieve exchange rate",
+		})
+	}
 
-	// Return a response
-	return c.JSON(http.StatusOK, map[string]string{"message": "Exchange rate retrieved successfully"})
+	// Stream the response body directly to the client
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("ERROR: Failed to read response body: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to process exchange rate",
+		})
+	}
+
+	return c.Blob(http.StatusOK, "application/json", body)
 }
 
 // ToggleMaintenance handles toggling maintenance mode.

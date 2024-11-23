@@ -1,0 +1,1 @@
+	url := fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=d91be54bb695297dd517edfdf7da5add&action=getOtp&sms=Dear user, your OTP is %s", encodedOtp)

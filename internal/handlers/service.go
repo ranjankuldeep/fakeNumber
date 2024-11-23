@@ -744,11 +744,7 @@ func HandleCheckOTP(c echo.Context) error {
 		fmt.Println("ERROR: API Key is missing")
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "API Key is required"})
 	}
-
 	db := c.Get("db").(*mongo.Database)
-
-	// Fetch server data
-	fmt.Println("DEBUG: Fetching server data for server 1")
 	var serverData models.Server
 	err := db.Collection("servers").FindOne(context.TODO(), bson.M{"server": 1}).Decode(&serverData)
 	if err != nil {
@@ -757,73 +753,63 @@ func HandleCheckOTP(c echo.Context) error {
 	}
 	fmt.Println("DEBUG: Retrieved server data:", serverData)
 
-	// Call external OTP service
+	// First API Call: Fetch OTP data
 	encodedOtp := url.QueryEscape(otp)
-	url := fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=d91be54bb695297dd517edfdf7da5add&action=getOtp&sms=%s", encodedOtp)
+	url := fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getOtp&sms=Dear user, your OTP is %s", serverData.APIKey, encodedOtp)
 	fmt.Println("DEBUG: Fetching OTP data from URL:", url)
+
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Println("ERROR: Failed to fetch OTP data from external service:", err)
+		fmt.Println("ERROR: Failed to fetch OTP data:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch OTP data"})
 	}
 	defer resp.Body.Close()
 
-	var data interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		fmt.Println("ERROR: Failed to decode response from OTP service:", err)
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid response from OTP service"})
+	var otpData []string
+	if err := json.NewDecoder(resp.Body).Decode(&otpData); err != nil {
+		fmt.Println("ERROR: Failed to decode OTP response:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid OTP response format"})
 	}
-	fmt.Println("DEBUG: OTP service response:", data)
+	fmt.Println("DEBUG: OTP service response:", otpData)
 
-	// Handle the response
-	switch v := data.(type) {
-	case bool:
-		fmt.Println("DEBUG: Response type is bool:", v)
-		if !v {
-			fmt.Println("ERROR: OTP not found")
-			return c.JSON(http.StatusNotFound, echo.Map{"error": "OTP not found"})
-		}
-	case []interface{}:
-		fmt.Println("DEBUG: Response type is array:", v)
-		codes := []string{}
-		if strings.Contains(v[0].(string), "|") {
-			parts := strings.Split(v[0].(string), "|")
-			fmt.Println("DEBUG: Splitting codes:", parts)
-			for _, part := range parts {
-				code := strings.TrimSpace(strings.ReplaceAll(part, `\d`, ""))
-				if code != "" {
-					codes = append(codes, code)
-				}
-			}
-		} else {
-			code := strings.TrimSpace(strings.ReplaceAll(v[0].(string), `\d`, ""))
-			codes = append(codes, code)
-		}
-		fmt.Println("DEBUG: Extracted codes:", codes)
-
-		// Search for matching codes in the database
-		results, err := searchCodes(codes, db)
-		if err != nil {
-			fmt.Println("ERROR: Failed to search codes:", err)
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to search codes"})
-		}
-		fmt.Println("DEBUG: Search results:", results)
-
-		if len(results) > 0 {
-			fmt.Println("DEBUG: Found matching results")
-			return c.JSON(http.StatusOK, echo.Map{"results": results})
-		} else {
-			fmt.Println("ERROR: No valid data found for the provided codes")
-			return c.JSON(http.StatusNotFound, echo.Map{"error": "No valid data found for the provided codes"})
-		}
-	default:
-		fmt.Println("ERROR: Unexpected response format:", v)
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Unexpected response format"})
+	// Handle empty OTP data
+	// Handle empty OTP data
+	if len(otpData) == 0 {
+		fmt.Println("DEBUG: No OTP data found")
+		return c.JSON(http.StatusOK, echo.Map{"results": []string{}})
 	}
 
-	// This line should never be reached
-	fmt.Println("ERROR: Unhandled case reached")
-	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Unhandled case"})
+	// Extract the first element from the OTP data
+	otpKey := otpData[0]
+	fmt.Println("DEBUG: Extracted OTP key:", otpKey)
+
+	// Second API Call: Fetch services data
+	servicesURL := "https://fastsms.su/stubs/handler_api.php?api_key=d91be54bb695297dd517edfdf7da5add&action=getServices"
+	fmt.Println("DEBUG: Fetching services data from URL:", servicesURL)
+
+	resp, err = http.Get(servicesURL)
+	if err != nil {
+		fmt.Println("ERROR: Failed to fetch services data:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch services data"})
+	}
+	defer resp.Body.Close()
+
+	var servicesData map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&servicesData); err != nil {
+		fmt.Println("ERROR: Failed to decode services response:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid services response format"})
+	}
+
+	// Search for the OTP key in the services response
+	serviceName, found := servicesData[otpKey]
+	if !found {
+
+		return c.JSON(http.StatusOK, echo.Map{"results": []string{}})
+	}
+	fmt.Println("DEBUG: Found service name for OTP key:", serviceName)
+
+	// Return the service name in the results array
+	return c.JSON(http.StatusOK, echo.Map{"results": []string{serviceName}})
 }
 
 func HandleNumberCancel(c echo.Context) error {

@@ -50,6 +50,7 @@ func RechargeUpiApi(c echo.Context) error {
 	userId := c.QueryParam("userId")
 	email := c.QueryParam("email")
 
+	// Validate input parameters
 	if userId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_USER_ID"})
 	}
@@ -59,19 +60,6 @@ func RechargeUpiApi(c echo.Context) error {
 	}
 
 	db := c.Get("db").(*mongo.Database)
-
-	// Check server maintenance
-	// Check server maintenance
-	// serverCollection := db.Collection("servers")
-	// var serverData bson.M
-	// if err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&serverData); err != nil {
-	// 	logs.Logger.Error(err)
-	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch server data"})
-	// }
-
-	// if serverData["maintainance"].(bool) {
-	// 	return c.JSON(http.StatusForbidden, map[string]string{"error": "Site is under maintenance."})
-	// }
 
 	// Check recharge maintenance
 	var rechargeData models.RechargeAPI
@@ -86,16 +74,22 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "UPI recharge is under maintenance."})
 	}
 
+	// Check if transaction ID is already present
+	rechargeHistoryCollection := db.Collection("recharge_histories") // Replace with your collection name
+	var existingRecharge bson.M
+	if err := rechargeHistoryCollection.FindOne(ctx, bson.M{"transaction_id": transactionId}).Decode(&existingRecharge); err == nil {
+		// If the document is found, return an error
+		return c.JSON(http.StatusConflict, map[string]string{"error": "Transaction ID already exists. Duplicate submission is not allowed."})
+	}
+
 	// Fetch transaction details
-	upiUrl := fmt.Sprintf("https://own5k.in/p/u.php?txn%s", transactionId)
+	upiUrl := fmt.Sprintf("https://own5k.in/p/u.php?txn=%s", transactionId)
 	resp, err := http.Get(upiUrl)
 	if err != nil {
 		log.Println("UPI API error:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
 	defer resp.Body.Close()
-	//log the upi response
-	log.Println("UPI response:", resp.Body)
 
 	var upiData UpiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&upiData); err != nil {

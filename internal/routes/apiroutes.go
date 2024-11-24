@@ -7,4 +7,5 @@ import (
 
 func RegisterApisRoutes(e *echo.Echo) {
 	e.GET("/number", handlers.GetNumberHandlerApi)
+	e.GET("/otp", handlers.GetOTPHandlerApi)
 }

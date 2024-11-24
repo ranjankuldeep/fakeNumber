@@ -36,7 +36,7 @@ func CallNextOTPServerRetry(otpURL string, headers map[string]string) error {
 		return err
 	}
 	responseString := string(body)
-	fmt.Printf("Response: %s\n", responseString)
+	logs.Logger.Info("Response: %s\n", responseString)
 	if strings.Contains(responseString, "ACCESS_RETRY_GET") {
 		return nil
 	} else {

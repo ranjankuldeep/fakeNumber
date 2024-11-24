@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 func ExtractNumberServerFromAccess(url string, headers map[string]string) (string, string, error) {
@@ -29,8 +31,7 @@ func ExtractNumberServerFromAccess(url string, headers map[string]string) (strin
 	if err != nil {
 		return "", "", err
 	}
-
-	// Convert body to string
+	logs.Logger.Debug(string(body))
 	responseData := string(body)
 
 	if responseData == "NO_BALANCE" {

@@ -44,6 +44,7 @@ func ExtractNumberServer2(url string, headers map[string]string) (string, string
 	if err != nil {
 		return "", "", err
 	}
+	logs.Logger.Debug(string(body))
 
 	if strings.Contains(string(body), "no free phones") {
 		return "", "", errors.New("no number available: no free phones")

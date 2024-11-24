@@ -440,11 +440,12 @@ func removeHTMLTags(input string) string {
 }
 
 func HandleGetOtp(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
 	ctx := context.Background()
 	id := c.QueryParam("id")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
-	serviceName := c.QueryParam("serviceName") // new parameter
+	serviceName := c.QueryParam("serviceName")
 
 	if id == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
@@ -456,9 +457,6 @@ func HandleGetOtp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
 	}
 
-	db := c.Get("db").(*mongo.Database)
-
-	// Validate API key and get user data
 	var apiWalletUser models.ApiWalletUser
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
 	err := apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
@@ -475,21 +473,18 @@ func HandleGetOtp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
 	}
 
-	// Get server data
 	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
-	// Construct OTP URL
 	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
 	}
 
-	// Fetch OTPs
 	validOtpList, err := fetchOTP(server, id, constructedOTPRequest) // Assuming this returns []string
 	if err != nil {
 		logs.Logger.Error(err)
@@ -548,19 +543,18 @@ func HandleGetOtp(c echo.Context) error {
 			if err != nil {
 				logs.Logger.Error(err)
 			}
+			go func(otp string) {
+				if otp == "STATUS_WAIT_CODE" || otp == "STATUS_CANCEL" {
+					return
+				}
+				err := triggerNextOtp(db, server, serviceName, id)
+				if err != nil {
+					log.Printf("Error triggering next OTP for ID: %s, OTP: %s - %v", id, otp, err)
+				} else {
+					log.Printf("Successfully triggered next OTP for ID: %s, OTP: %s", id, otp)
+				}
+			}(validOtp)
 		}
-
-		go func(otp string) {
-			if otp == "STATUS_WAIT_CODE" || otp == "STATUS_CANCEL" {
-				return
-			}
-			err := triggerNextOtp(db, server, serviceName, id)
-			if err != nil {
-				log.Printf("Error triggering next OTP for ID: %s, OTP: %s - %v", id, otp, err)
-			} else {
-				log.Printf("Successfully triggered next OTP for ID: %s, OTP: %s", id, otp)
-			}
-		}(validOtp)
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{

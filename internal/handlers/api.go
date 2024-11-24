@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/internal/services"
+	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -231,4 +234,158 @@ func GetNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "id": numData.Id, "number": numData.Number})
+}
+
+func GetOTPHandlerApi(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	ctx := context.TODO()
+	apiKey := c.QueryParam("apikey")
+	server := c.QueryParam("server")
+	id := c.QueryParam("id")
+
+	if apiKey == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty key"})
+	}
+	if server == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty server number"})
+	}
+	if id == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty id"})
+	}
+
+	var transaction models.TransactionHistory
+	transactionCollection := models.InitializeTransactionHistoryCollection(db)
+	err := transactionCollection.FindOne(context.TODO(), bson.M{"id": id}).Decode(&transaction)
+	if err != nil {
+		logs.Logger.Info("sdf")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
+	}
+	serviceName := transaction.Service
+
+	var apiWalletUser models.ApiWalletUser
+	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
+	err = apiWalletCollection.FindOne(context.TODO(), bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	if err != nil {
+		if err == mongo.ErrEmptySlice {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "invalid api key"})
+		}
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
+	}
+
+	userCollection := models.InitializeUserCollection(db)
+	var userData models.User
+	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&userData)
+	if userData.Blocked {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "your account is blocked, contact the admin"})
+	}
+
+	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
+	}
+
+	validOtpList, err := fetchOTP(server, id, constructedOTPRequest)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	for _, validOtp := range validOtpList {
+		var existingEntry models.TransactionHistory
+		transactionCollection := models.InitializeTransactionHistoryCollection(db)
+
+		err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
+		if err == mongo.ErrNoDocuments || err == mongo.ErrEmptySlice {
+			formattedDateTime := formatDateTime()
+
+			var transaction models.TransactionHistory
+			err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+
+			numberHistory := models.TransactionHistory{
+				ID:            primitive.NewObjectID(),
+				UserID:        apiWalletUser.UserID.Hex(),
+				Service:       transaction.Service,
+				Price:         transaction.Price,
+				Server:        server,
+				TransactionID: id,
+				OTP:           validOtp,
+				Status:        "FINISHED",
+				Number:        transaction.Number,
+				DateTime:      formattedDateTime,
+			}
+
+			_, err = transactionCollection.InsertOne(ctx, numberHistory)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+
+			ipDetails, err := utils.GetIpDetails(c)
+			if err != nil {
+				logs.Logger.Error(err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			formattedIpDetails := removeHTMLTags(ipDetails)
+
+			otpDetail := services.OTPDetails{
+				Email:       userData.Email,
+				ServiceName: transaction.Service,
+				Price:       transaction.Price,
+				Server:      transaction.Server,
+				Number:      transaction.Number,
+				OTP:         validOtp,
+				Ip:          formattedIpDetails,
+			}
+			err = services.OtpGetDetails(otpDetail)
+			if err != nil {
+				logs.Logger.Error(err)
+			}
+			go func(otp string) {
+				if otp == "STATUS_WAIT_CODE" || otp == "STATUS_CANCEL" || otp == "" {
+					return
+				}
+				err := triggerNextOtp(db, server, serviceName, id)
+				if err != nil {
+					log.Printf("Error triggering next OTP for ID: %s, OTP: %s - %v", id, otp, err)
+				} else {
+					log.Printf("Successfully triggered next OTP for ID: %s, OTP: %s", id, otp)
+				}
+			}(validOtp)
+		}
+	}
+
+	numberCancelled := false
+	for _, otp := range validOtpList {
+		if otp == "STATUS_CANCEL" {
+			numberCancelled = true
+		}
+	}
+	if numberCancelled == true {
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok", "otp": "number cancelled"})
+	}
+
+	var responseOTPs []string
+	otpReceived := false
+	for _, otp := range validOtpList {
+		if otp != "" && otp != "STATUS_WAIT_CODE" {
+			otpReceived = true
+			responseOTPs = append(responseOTPs, otp)
+		}
+	}
+	if otpReceived == true {
+		if otpReceived == true {
+			return c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": responseOTPs})
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": "waiting for otp"})
 }

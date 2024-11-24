@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 type Response struct {
@@ -36,6 +38,7 @@ func CallNextOTPServerUnMarshalling(otpURL string, headers map[string]string) er
 		fmt.Printf("Error reading response body: %v\n", err)
 		return err
 	}
+	logs.Logger.Info(string(body))
 	var apiResponse Response
 	err = json.Unmarshal(body, &apiResponse)
 	if err != nil {

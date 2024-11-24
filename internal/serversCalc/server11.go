@@ -36,6 +36,7 @@ func ExtractNumberServer11(url string) (string, string, error) {
 		logs.Logger.Error(err)
 		return "", "", err
 	}
+	logs.Logger.Debug(string(body))
 
 	var apiResponse APIResponseServer11
 	if err := json.Unmarshal(body, &apiResponse); err != nil {

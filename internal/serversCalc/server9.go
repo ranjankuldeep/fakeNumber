@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 // TokenResponse represents the response structure for the token API.
@@ -56,6 +58,7 @@ func ExtractNumberServer9(fullURL string, headers map[string]string) (string, st
 	if err != nil {
 		return "", "", fmt.Errorf("error reading number response: %w", err)
 	}
+	logs.Logger.Debug(string(body))
 
 	var numberResponse NumberResponse
 	if err := json.Unmarshal(body, &numberResponse); err != nil {

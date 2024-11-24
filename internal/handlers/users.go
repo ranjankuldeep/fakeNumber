@@ -457,7 +457,8 @@ func Login(c echo.Context) error {
 	}
 
 	var wallet WalletUser
-	err = walletCol.FindOne(ctx, bson.M{"userId": loginUser.ID}).Decode(&wallet)
+	userID, err := primitive.ObjectIDFromHex(loginUser.ID)
+	err = walletCol.FindOne(ctx, bson.M{"userId": userID}).Decode(&wallet)
 	if err == mongo.ErrNoDocuments {
 		log.Println("ERROR: Wallet not found for user:", err)
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "Wallet not found"})
@@ -754,7 +755,7 @@ type ForgotVerifyOTPRequest struct {
 // ForgotVerifyOTP handles the OTP verification process
 func ForgotVerifyOTP(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	otpCol := db.Collection("otp") // Ensure this collection corresponds to where OTPs are stored
+	otpCol := db.Collection("forgototps") // Ensure this collection corresponds to where OTPs are stored
 
 	var request ForgotVerifyOTPRequest
 	if err := c.Bind(&request); err != nil {
@@ -780,15 +781,14 @@ func ForgotVerifyOTP(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
 
-	// Retrieve the stored hashed OTP from the document
-	storedHashedOTP, ok := otpDoc["otp"].(string)
+	// Retrieve the stored OTP from the document
+	storedOTP, ok := otpDoc["otp"].(string)
 	if !ok {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid OTP data format"})
 	}
 
-	// Compare the provided OTP with the stored hashed OTP
-	err = bcrypt.CompareHashAndPassword([]byte(storedHashedOTP), []byte(otp))
-	if err != nil {
+	// Compare the provided OTP with the stored OTP
+	if storedOTP != otp {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid OTP"})
 	}
 
@@ -809,7 +809,7 @@ type ChangePasswordUnauthenticatedRequest struct {
 func ChangePasswordUnauthenticated(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	userCol := db.Collection("users")
-	otpCol := db.Collection("otp")
+	otpCol := db.Collection("forgototps") // Ensure this collection corresponds to where OTPs are stored
 
 	var request ChangePasswordUnauthenticatedRequest
 	if err := c.Bind(&request); err != nil {
@@ -890,9 +890,15 @@ func ChangePasswordAuthenticated(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Convert UserID to ObjectId
+	userID, err := primitive.ObjectIDFromHex(request.UserID)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid UserID format"})
+	}
+
 	// Find the user by UserID
 	var user bson.M
-	err := userCol.FindOne(ctx, bson.M{"_id": request.UserID}).Decode(&user)
+	err = userCol.FindOne(ctx, bson.M{"_id": userID}).Decode(&user)
 	if err == mongo.ErrNoDocuments {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
 	} else if err != nil {
@@ -913,9 +919,9 @@ func ChangePasswordAuthenticated(c echo.Context) error {
 	}
 
 	// Update the user's password
-	filter := bson.M{"_id": request.UserID}
+	filter := bson.M{"_id": userID}
 	update := bson.M{"$set": bson.M{"password": string(newHashedPassword)}}
-	_, err = userCol.UpdateOne(ctx, filter, update, options.Update().SetUpsert(false))
+	_, err = userCol.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update password"})
 	}

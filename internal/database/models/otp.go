@@ -31,7 +31,7 @@ func InitializeVerifyOTPCollection(db *mongo.Database) *mongo.Collection {
 
 // InitializeForgotOTPCollection initializes the collection for "forgotOtp"
 func InitializeForgotOTPCollection(db *mongo.Database) *mongo.Collection {
-	collection := db.Collection("forgotOtp")
+	collection := db.Collection("forgototps")
 
 	// Ensuring the email field is unique
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

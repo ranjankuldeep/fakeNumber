@@ -5,13 +5,6 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/handlers"
 )
 
-// RegisterBlockUsersRoutes sets up routes for block user operations.
 func RegisterApisRoutes(e *echo.Echo) {
-	blockGroup := e.Group("/")
-
-	// Define routes
-	blockGroup.POST("block-status-toggle", handlers.ToggleBlockStatus)
-	blockGroup.GET("get-block-status", handlers.GetBlockStatus)
-	blockGroup.GET("save-block-types", handlers.SavePredefinedBlockTypes)
-	blockGroup.DELETE("block-fraud-clear", handlers.BlockFraudClear)
+	e.GET("/number", handlers.GetNumberHandlerApi)
 }

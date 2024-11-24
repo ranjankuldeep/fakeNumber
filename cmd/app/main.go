@@ -104,6 +104,7 @@ func main() {
 	routes.RegisterServerRoutes(e)
 	routes.RegisterServiceDiscountRoutes(e)
 	routes.RegisterServerDiscountRoutes(e)
+	routes.RegisterApisRoutes(e)
 
 	e.Logger.Fatal(e.Start(":8000"))
 }

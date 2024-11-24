@@ -36,6 +36,7 @@ type ResponseData struct {
 	ID     string
 	Number string
 }
+
 type NumberData struct {
 	Id     string
 	Number string
@@ -50,13 +51,10 @@ type ServerSecrets struct {
 	Token        string
 }
 
-var numData NumberData
-
 func HandleGetNumberRequest(c echo.Context) error {
 	ctx := context.TODO()
 	db := c.Get("db").(*mongo.Database)
 
-	// Get query parameters
 	serverDataCode := c.QueryParam("code")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
@@ -142,104 +140,9 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't construcrt api url"})
 	}
 	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
-	switch server {
-	case "1":
-		// Multiple OTP server with same url
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "2":
-		// Multiple OTP server with same url
-		number, id, err := serverscalc.ExtractNumberServer2(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "3":
-		// Multiple OTP server with same url
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "4":
-		// Single OTP server
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "5":
-		// Multiple OTP server with same url
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "6":
-		// Single OTP server
-		// Done
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "7":
-		// Multiple OTP server with same url
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "8":
-		// Done
-		// Multiple OTP server with same url
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "9":
-		// Single OTP server
-		// Done
-		number, id, err := serverscalc.ExtractNumberServer9(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "10":
-		// Single OTP server
-		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
-		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
-	case "11":
-		// Multiple OTP servers with different URLs
-		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
-		if err != nil {
-			if strings.Contains(err.Error(), "no_channels") {
-				logs.Logger.Warn("No channels available. The channel limit has been reached.")
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-			}
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
-		}
-		numData.Id = id
-		numData.Number = number
+	numData, err := ExtractNumber(server, apiURLRequest)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	logs.Logger.Info(fmt.Sprintf("id-%s number-%s", numData.Id, numData.Number))
@@ -379,7 +282,130 @@ func HandleGetNumberRequest(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "id": numData.Id, "number": numData.Number})
 }
 
-// Helper Functions
+func ExtractNumber(server string, apiURLRequest ApiRequest) (NumberData, error) {
+	switch server {
+	case "1":
+		// Multiple OTP server with same url
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "2":
+		// Multiple OTP server with same url
+		number, id, err := serverscalc.ExtractNumberServer2(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "3":
+		// Multiple OTP server with same url
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "4":
+		// Single OTP server
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "5":
+		// Multiple OTP server with same url
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "6":
+		// Single OTP server
+		// Done
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "7":
+		// Multiple OTP server with same url
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "8":
+		// Done
+		// Multiple OTP server with same url
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "9":
+		// Single OTP server
+		// Done
+		number, id, err := serverscalc.ExtractNumberServer9(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			logs.Logger.Error(err)
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "10":
+		// Single OTP server
+		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
+		if err != nil {
+			logs.Logger.Error(err)
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	case "11":
+		// Multiple OTP servers with different URLs
+		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
+		if err != nil {
+			if strings.Contains(err.Error(), "no_channels") {
+				logs.Logger.Warn("No channels available. The channel limit has been reached.")
+				return NumberData{}, fmt.Errorf("no stock")
+			}
+			return NumberData{}, fmt.Errorf("no stock")
+		}
+		return NumberData{
+			Id:     id,
+			Number: number,
+		}, nil
+	}
+	return NumberData{}, nil
+}
 func FetchDiscount(ctx context.Context, db *mongo.Database, userId, sname string, server int) (float64, error) {
 	totalDiscount := 0.0
 
@@ -544,8 +570,10 @@ func HandleGetOtp(c echo.Context) error {
 			}
 		}
 
-		// Trigger the next OTP asynchronously for each OTP
 		go func(otp string) {
+			if otp == "STATUS_WAIT_CODE" || otp == "STATUS_CANCEL" {
+				return
+			}
 			err := triggerNextOtp(db, server, serviceName, id)
 			if err != nil {
 				log.Printf("Error triggering next OTP for ID: %s, OTP: %s - %v", id, otp, err)

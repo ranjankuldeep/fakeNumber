@@ -67,7 +67,11 @@ func HandleGetNumberRequest(c echo.Context) error {
 	serviceName := strings.ReplaceAll(temp, "%", " ")
 	serverNumber, _ := strconv.Atoi(server)
 
-	if serviceName == "" || apiKey == "" || server == "" || serverDataCode == "" {
+	if apiKey == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid key"})
+	}
+
+	if serviceName == "" || server == "" || serverDataCode == "" {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Service code, API key, and Server are required."})
 	}
 
@@ -131,20 +135,19 @@ func HandleGetNumberRequest(c echo.Context) error {
 			}
 		}
 	}
-	// fetch id and numbers
+
 	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't construcrt api url"})
 	}
 	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
-	// handler all the server case and extract id and number
 	switch server {
 	case "1":
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -152,7 +155,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		number, id, err := serverscalc.ExtractNumberServer2(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -160,7 +163,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -168,7 +171,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Single OTP server
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -176,7 +179,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -185,7 +188,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Done
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -193,7 +196,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -202,7 +205,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP server with same url
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -212,7 +215,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		number, id, err := serverscalc.ExtractNumberServer9(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -221,7 +224,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		id, number, err := serverscalc.ExtractNumberServerFromAccess(apiURLRequest.URL, apiURLRequest.Headers)
 		if err != nil {
 			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -229,17 +232,11 @@ func HandleGetNumberRequest(c echo.Context) error {
 		// Multiple OTP servers with different URLs
 		number, id, err := serverscalc.ExtractNumberServer11(apiURLRequest.URL)
 		if err != nil {
-			// Handle specific "no_channels" error
 			if strings.Contains(err.Error(), "no_channels") {
 				logs.Logger.Warn("No channels available. The channel limit has been reached.")
-				return c.JSON(http.StatusServiceUnavailable, map[string]string{
-					"error": "No number",
-				})
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 			}
-
-			// Log and return other errors
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 		}
 		numData.Id = id
 		numData.Number = number
@@ -377,7 +374,10 @@ func HandleGetNumberRequest(c echo.Context) error {
 		logs.Logger.Infof("Third-party call for transaction %s completed successfully.", id)
 	}(numData.Id, numData.Number, apiWalletUser.UserID.Hex(), db, ctx)
 
-	return c.JSON(http.StatusOK, map[string]string{"id": numData.Id, "number": numData.Number})
+	if numData.Id == "" || numData.Number == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "id": numData.Id, "number": numData.Number})
 }
 
 // Helper Functions

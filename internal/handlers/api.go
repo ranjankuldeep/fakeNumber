@@ -54,8 +54,8 @@ func GetNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "your account is blocked, contact the admin"})
 	}
 
-	serverCollection := models.InitializeServerCollection(db)
 	var serverInfo models.Server
+	serverCollection := models.InitializeServerCollection(db)
 	err = serverCollection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverInfo)
 	if err != nil {
 		logs.Logger.Error(err)

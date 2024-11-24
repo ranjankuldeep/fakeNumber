@@ -87,25 +87,26 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// Fetch user details and return if user is blocked
-	userCollection := models.InitializeUserCollection(db)
 	var user models.User
+	userCollection := models.InitializeUserCollection(db)
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
-	// Check if the user is blocked
 	if user.Blocked {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "account blocked"})
 	}
 
-	serverCollection := models.InitializeServerCollection(db)
 	var serverInfo models.Server
+	serverCollection := models.InitializeServerCollection(db)
 	err = serverCollection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverInfo)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
+	if serverInfo.Maintenance == true {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "under maintenance"})
+	}
 
-	serverListollection := models.InitializeServerListCollection(db)
 	var serverList models.ServerList
+	serverListollection := models.InitializeServerListCollection(db)
 	err = serverListollection.FindOne(ctx, bson.M{
 		"name":           serviceName,
 		"servers.server": serverNumber,

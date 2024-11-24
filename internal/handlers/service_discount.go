@@ -54,7 +54,7 @@ func AddServiceDiscount(c echo.Context) error {
 
 	// Parse and validate discount
 	discount, err := strconv.ParseFloat(fmt.Sprintf("%v", input.Discount), 64)
-	if err != nil || discount < 0 {
+	if err != nil {
 		log.Println("ERROR: Invalid discount value:", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Discount must be a valid number."})
 	}

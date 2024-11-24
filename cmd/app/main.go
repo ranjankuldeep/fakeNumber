@@ -58,7 +58,7 @@ func main() {
 	// CORS middleware to allow only http://localhost:5173
 	// Configure CORS to allow requests from http://localhost:5173 with credentials
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:5173"}, // Allow only localhost:5173
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true, // Enable credentials

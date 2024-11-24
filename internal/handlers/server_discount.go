@@ -54,10 +54,6 @@ func AddDiscount(c echo.Context) error {
 		log.Println("ERROR: Server number is required and must be greater than 0")
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Server number is required and must be greater than 0"})
 	}
-	if input.Discount < 0 {
-		log.Println("ERROR: Discount must be a non-negative number")
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Discount must be a non-negative number"})
-	}
 
 	// Initialize collection and set up filter, update, and options
 	serverDiscountCol := db.Collection("server-discounts")

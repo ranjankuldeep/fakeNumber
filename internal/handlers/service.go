@@ -60,8 +60,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 	server := c.QueryParam("server")
 	temp := c.QueryParam("serverName")
 	isMultiple := c.QueryParam("isMultiple")
-	logs.Logger.Infof("%s %s %s %s", serverDataCode, apiKey, server, temp)
-
 	serviceName := strings.ReplaceAll(temp, "%", " ")
 	serverNumber, _ := strconv.Atoi(server)
 
@@ -73,22 +71,20 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Service code, API key, and Server are required."})
 	}
 
-	// Fetch service details
 	serverListCollection := models.InitializeServerListCollection(db)
 	var service models.ServerList
 	err := serverListCollection.FindOne(ctx, bson.M{"name": serviceName}).Decode(&service)
 	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Service not found."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// Fetch apiWalletUser details for calculating balance
 	apiWalletUserCollection := models.InitializeApiWalletuserCollection(db)
 	var apiWalletUser models.ApiWalletUser
 	err = apiWalletUserCollection.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid API key."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
 	// Fetch user details and return if user is blocked
@@ -97,20 +93,17 @@ func HandleGetNumberRequest(c echo.Context) error {
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
 	// Check if the user is blocked
 	if user.Blocked {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Your account is blocked, contact the Admin."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "account blocked"})
 	}
 
-	//// Fetch server maintenance data
-	// TODO: ALSO HADNLE THE MAITAINENCE
 	serverCollection := models.InitializeServerCollection(db)
 	var serverInfo models.Server
 	err = serverCollection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverInfo)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Server not found."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// Find the server list for the specified server name and server number
 	serverListollection := models.InitializeServerListCollection(db)
 	var serverList models.ServerList
 	err = serverListollection.FindOne(ctx, bson.M{
@@ -118,10 +111,9 @@ func HandleGetNumberRequest(c echo.Context) error {
 		"servers.server": serverNumber,
 	}).Decode(&serverList)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't find serverlist"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	// Find the specific server data
 	var serverData models.ServerData
 	for _, s := range serverList.Servers {
 		if s.Server == serverNumber {
@@ -137,7 +129,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Couldn't construcrt api url"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
 	numData, err := ExtractNumber(server, apiURLRequest)
@@ -145,24 +137,18 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	logs.Logger.Info(fmt.Sprintf("id-%s number-%s", numData.Id, numData.Number))
-
-	// update the price with the discount
 	price, _ := strconv.ParseFloat(serverData.Price, 64)
 	discount, err := FetchDiscount(ctx, db, user.ID.Hex(), serviceName, serverNumber)
 	price += discount
-
-	// Check user balance
 	if apiWalletUser.Balance < price {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INSUFFICENT_USER_BALANCE"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "low balance"})
 	}
 
-	// Deduct balance and save to DB
 	newBalance := apiWalletUser.Balance - price
 	roundedBalance := math.Round(newBalance*100) / 100
 	_, err = apiWalletUserCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": roundedBalance}})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_UPDATE_USER_BALANCE"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
@@ -180,7 +166,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 	_, err = transactionHistoryCollection.InsertOne(ctx, transaction)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save transaction history."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
 	orderCollection := models.InitializeOrderCollection(db)
@@ -197,7 +183,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 	_, err = orderCollection.InsertOne(ctx, order)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save order."})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	logs.Logger.Info(numData.Id, numData.Number)
 
@@ -207,8 +193,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 				logs.Logger.Error("Recovered from panic in OTP handling goroutine:", r)
 			}
 		}()
-
-		// Define the wait duration for each server case
 		var waitDuration time.Duration
 		switch server {
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11":
@@ -223,7 +207,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 			return
 		}
 
-		// Check for existing OTP in the transaction collection
 		var transactionData []models.TransactionHistory
 		transactionCollection := models.InitializeTransactionHistoryCollection(db)
 
@@ -259,21 +242,17 @@ func HandleGetNumberRequest(c echo.Context) error {
 			return
 		}
 
-		// Construct number request URL
 		constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, number)
 		if err != nil {
 			logs.Logger.Error(err)
 			return
 		}
 
-		// Call third-party API to cancel the number
 		err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
 		if err != nil {
 			logs.Logger.Error(err)
 			return
 		}
-
-		logs.Logger.Infof("Third-party call for transaction %s completed successfully.", id)
 	}(numData.Id, numData.Number, apiWalletUser.UserID.Hex(), db, ctx)
 
 	if numData.Id == "" || numData.Number == "" {

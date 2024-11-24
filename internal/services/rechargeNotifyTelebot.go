@@ -13,8 +13,31 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// Define input for TRX recharge
+type TrxRechargeDetails struct {
+	Email        string
+	UserID       string
+	Trx          float64
+	ExchangeRate float64
+	Amount       float64
+	Address      string
+	SendTo       string
+	IP           string
+	Hash         string
+}
+
+// Define input for UPI recharge
+type UpiRechargeDetails struct {
+	Email  string
+	UserID string
+	TrnID  string
+	Amount float64
+	IP     string
+}
+
+// FetchUser retrieves user details from the database
 func FetchUser(userID string, db *mongo.Database) (*models.ApiWalletUser, error) {
-	apiWalletUserCollection := models.InitializeApiWalletuserCollection(db)
+	apiWalletUserCollection := db.Collection("apiWalletUsers") // Update the collection name as needed
 	userObjectID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid userID: %v", err)
@@ -32,9 +55,9 @@ func FetchUser(userID string, db *mongo.Database) (*models.ApiWalletUser, error)
 	return &user, nil
 }
 
-// TrxRechargeTeleBot sends transaction recharge details to Telegram bot
-func TrxRechargeTeleBot(db *mongo.Database, email, userID string, trx float64, exchangeRate, amount float64, address, sendTo, ip, hash string) (string, error) {
-	user, err := FetchUser(userID, db)
+// TrxRechargeTeleBot sends TRX recharge details to Telegram bot
+func TrxRechargeTeleBot(db *mongo.Database, details TrxRechargeDetails) (string, error) {
+	user, err := FetchUser(details.UserID, db)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch user balance: %v", err)
 	}
@@ -51,8 +74,8 @@ func TrxRechargeTeleBot(db *mongo.Database, email, userID string, trx float64, e
 			"Send To => %s\n\n"+
 			"IP Details => %s\n\n"+
 			"Txn/Hash Id => %s\n\n",
-		time.Now().Format("02-01-2006 03:04:05PM"),
-		email, trx, exchangeRate, amount, user.Balance, address, sendTo, ip, hash,
+		time.Now().Format("02-01-2006 03:04:05 PM"),
+		details.Email, details.Trx, details.ExchangeRate, details.Amount, user.Balance, details.Address, details.SendTo, details.IP, details.Hash,
 	)
 
 	encodedResult := url.QueryEscape(result)
@@ -72,8 +95,8 @@ func TrxRechargeTeleBot(db *mongo.Database, email, userID string, trx float64, e
 }
 
 // UpiRechargeTeleBot sends UPI recharge details to Telegram bot
-func UpiRechargeTeleBot(db *mongo.Database, email, userID, trnID string, amount float64, ip string) (string, error) {
-	user, err := FetchUser(userID, db)
+func UpiRechargeTeleBot(db *mongo.Database, details UpiRechargeDetails) (string, error) {
+	user, err := FetchUser(details.UserID, db)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch user balance: %v", err)
 	}
@@ -86,8 +109,8 @@ func UpiRechargeTeleBot(db *mongo.Database, email, userID, trnID string, amount 
 			"Updated Balance => %.2f₹\n\n"+
 			"IP Details => %s\n\n"+
 			"Txn Id => %s\n\n",
-		time.Now().Format("02-01-2006 03:04:05PM"),
-		email, amount, user.Balance, ip, trnID,
+		time.Now().Format("02-01-2006 03:04:05 PM"),
+		details.Email, details.Amount, user.Balance, details.IP, details.TrnID,
 	)
 
 	encodedResult := url.QueryEscape(result)
@@ -102,5 +125,6 @@ func UpiRechargeTeleBot(db *mongo.Database, email, userID, trnID string, amount 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP error: status %v", resp.Status)
 	}
+
 	return result, nil
 }

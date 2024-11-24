@@ -26,6 +26,15 @@ type NumberDetails struct {
 	Number      string
 	Ip          string
 }
+type CancelDetails struct {
+	Email       string
+	ServiceName string
+	Price       float64
+	Server      string
+	Number      int64
+	Balance     float64
+	IP          string
+}
 
 // sendMessage sends a message to the Telegram Bot API
 func sendMessage(chatID, token, message string) error {
@@ -56,7 +65,7 @@ func NumberGetDetails(numberInfo NumberDetails) error {
 	result += fmt.Sprintf("Service Code => %s\n\n", numberInfo.ServiceCode)
 	result += fmt.Sprintf("Price => %s₹\n\n", numberInfo.Price)
 	result += fmt.Sprintf("Server => %s\n\n", numberInfo.Server)
-	result += fmt.Sprintf("Number => %d\n\n", numberInfo.Number)
+	result += fmt.Sprintf("Number => %s\n\n", numberInfo.Number)
 	result += fmt.Sprintf("Balance => %s₹\n\n", numberInfo.Balance)
 	result += fmt.Sprintf("IP Details => %s\n\n", numberInfo.Ip)
 

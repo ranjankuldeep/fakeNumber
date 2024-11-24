@@ -45,14 +45,11 @@ func ExtractNumberServer2(url string, headers map[string]string) (string, string
 		return "", "", err
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		if strings.Contains(string(body), "no free phones") {
-			return "", "", errors.New("no number available: no free phones")
-		}
-		if strings.Contains(string(body), "not enough user balance") {
-			return "", "", errors.New("no balance available: not enough user balance")
-		}
-		return "", "", errors.New("unknown error occurred: " + string(body))
+	if strings.Contains(string(body), "no free phones") {
+		return "", "", errors.New("no number available: no free phones")
+	}
+	if strings.Contains(string(body), "not enough user balance") {
+		return "", "", errors.New("no balance available: not enough user balance")
 	}
 
 	var response Response

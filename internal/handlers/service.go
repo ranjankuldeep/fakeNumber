@@ -256,7 +256,8 @@ func HandleGetNumberRequest(c echo.Context) error {
 
 	// Deduct balance and save to DB
 	newBalance := apiWalletUser.Balance - price
-	_, err = apiWalletUserCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": newBalance}})
+	roundedBalance := math.Round(newBalance*100) / 100
+	_, err = apiWalletUserCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": roundedBalance}})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_UPDATE_USER_BALANCE"})
 	}
@@ -310,8 +311,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11":
 			waitDuration = 3 * time.Minute
 		}
-
-		logs.Logger.Infof("Waiting for %s before checking OTP for server %s", waitDuration, server)
 		time.Sleep(waitDuration)
 
 		// Fetch server data with maintenance check

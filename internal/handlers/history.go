@@ -84,7 +84,7 @@ func GetTransactionHistory(c echo.Context) error {
 	cursor.All(ctx, &transactionHistoryData)
 
 	if len(transactionHistoryData) == 0 {
-		return c.JSON(http.StatusOK, echo.Map{"message": "No transaction history found for the provided userId"})
+		return c.JSON(http.StatusOK, transactionHistoryData)
 	}
 
 	// Reverse the transaction history data

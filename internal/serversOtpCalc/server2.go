@@ -70,6 +70,9 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) ([]
 		smsTexts = append(smsTexts, sms.Text)
 	}
 
+	if otpResponse.Status == "CANCELED" {
+		return []string{"STATUS_CANCEL"}, nil
+	}
 	if len(smsTexts) == 0 {
 		return []string{"STATUS_WAIT_CODE"}, nil
 	}

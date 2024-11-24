@@ -987,7 +987,7 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 	responseData := string(body)
-	logs.Logger.Error(responseData)
+	logs.Logger.Info(responseData)
 	if strings.TrimSpace(responseData) == "" {
 		return errors.New("RECEIVED_EMTPY_RESPONSE_FROM_THIRD_PARTY_SERVER")
 	}
@@ -1025,7 +1025,6 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		} else {
 			return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
 	case "4":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil

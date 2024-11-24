@@ -389,3 +389,160 @@ func GetOTPHandlerApi(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": "waiting for otp"})
 }
+
+func CancelNumberHandlerApi(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	ctx := context.TODO()
+	apiKey := c.QueryParam("apikey")
+	server := c.QueryParam("server")
+	id := c.QueryParam("id")
+
+	if apiKey == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty key"})
+	}
+	if server == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty server number"})
+	}
+	if id == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty id"})
+	}
+
+	transactionCollection := models.InitializeTransactionHistoryCollection(db)
+	var existingOrder models.Order
+	orderCollection := models.InitializeOrderCollection(db)
+	err := orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "number already cancelled"})
+	}
+
+	var apiWalletUser models.ApiWalletUser
+	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
+	err = apiWalletCollection.FindOne(context.TODO(), bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	if err != nil {
+		if err == mongo.ErrEmptySlice {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "invalid api key"})
+		}
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
+	}
+
+	userCollection := models.InitializeUserCollection(db)
+	var userData models.User
+	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&userData)
+	if userData.Blocked {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "your account is blocked, contact the admin"})
+	}
+
+	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	if serverData.Maintenance == true {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "under maintenance"})
+	}
+
+	// case 1: if request comes with in 2 minutes
+	timeDifference := time.Now().Sub(existingOrder.OrderTime)
+	if timeDifference < 2*time.Minute {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "wait 2 mints before cancel"})
+	}
+
+	// case 3: if otp already arrived
+	var transactionData []models.TransactionHistory
+	filter := bson.M{
+		"userId": apiWalletUser.UserID.Hex(),
+		"id":     id,
+	}
+	cursor, err := transactionCollection.Find(ctx, filter)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_FETCH_TRANSACTION_HISTORY"})
+	}
+	defer cursor.Close(ctx)
+	if err := cursor.All(ctx, &transactionData); err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_PARSE_TRANSACTION_HISTORY"})
+	}
+
+	if len(transactionData) == 0 {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "TRANSACTION_HISTORY_NOT_FOUND"})
+	}
+	otpArrived := false
+	for _, transaction := range transactionData {
+		if transaction.OTP != "" && transaction.OTP != "STATUS_WAIT_CODE" && transaction.OTP != "STATUS_CANCEL" {
+			otpArrived = true
+		}
+	}
+	if otpArrived == true {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "otp already come"})
+	}
+
+	constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, existingOrder.Number)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
+	}
+
+	_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_NOT_FOUND"})
+	}
+
+	err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// if no existing entry found with status cancelled then make a new transaction with status cancelled.
+	var transaction models.TransactionHistory
+	formattedData := formatDateTime()
+
+	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	numberHistory := models.TransactionHistory{
+		UserID:        transaction.UserID,
+		Service:       transaction.Service,
+		Price:         transaction.Price,
+		Server:        server,
+		TransactionID: id,
+		OTP:           "",
+		Status:        "CANCELLED",
+		Number:        transaction.Number,
+		DateTime:      formattedData,
+	}
+
+	_, err = transactionCollection.InsertOne(ctx, numberHistory)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	price, err := strconv.ParseFloat(transaction.Price, 64)
+	newBalance := apiWalletUser.Balance + price
+	newBalance = math.Round(newBalance*100) / 100
+
+	update := bson.M{
+		"$set": bson.M{"balance": newBalance},
+	}
+	balanceFilter := bson.M{"_id": apiWalletUser.UserID}
+
+	_, err = apiWalletCollection.UpdateOne(ctx, balanceFilter, update)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	ipDetails, err := utils.GetIpDetails(c)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
+	}
+	services.NumberCancelDetails(userData.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
+	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}

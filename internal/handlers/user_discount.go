@@ -17,7 +17,7 @@ import (
 
 func AddUserDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("userDiscount")
+	userDiscountCollection := db.Collection("user-discounts")
 	userCollection := models.InitializeUserCollection(db)
 
 	var req struct {
@@ -49,7 +49,7 @@ func AddUserDiscount(c echo.Context) error {
 // GetUserDiscount retrieves all discounts for a specific user
 func GetUserDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("userDiscount")
+	userDiscountCollection := db.Collection("user-discounts")
 
 	userID := c.QueryParam("userId")
 	if userID == "" {
@@ -81,7 +81,7 @@ func GetUserDiscount(c echo.Context) error {
 // DeleteUserDiscount deletes a specific user discount by service and server
 func DeleteUserDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("userDiscount")
+	userDiscountCollection := db.Collection("user-discounts")
 
 	userID := c.QueryParam("userId")
 	service := c.QueryParam("service")

@@ -156,39 +156,79 @@ func UpiQRUpdateHandler(c echo.Context) error {
 
 // Handler to create or update API key for recharge type
 func CreateOrUpdateAPIKeyHandler(c echo.Context) error {
-	db := c.Get("db").(*mongo.Database)
-	rechargeCol := models.InitializeRechargeAPICollection(db)
+	// Log: Start of the function
+	log.Println("INFO: Starting CreateOrUpdateAPIKeyHandler")
 
-	apiKey := c.FormValue("api_key")
-	rechargeType := c.FormValue("recharge_type")
-	if rechargeType == "" || apiKey == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "API key and recharge_type are required"})
+	// Retrieve the database instance
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	log.Println("INFO: Database instance retrieved successfully")
+
+	// Initialize the recharge API collection
+	rechargeCol := models.InitializeRechargeAPICollection(db)
+	log.Println("INFO: Initialized recharge API collection")
+
+	// Define a struct to map the JSON payload
+	type APIKeyRequest struct {
+		RechargeType string `json:"recharge_type"`
+		APIKey       string `json:"api_key"`
 	}
 
+	// Parse the JSON payload
+	var req APIKeyRequest
+	if err := c.Bind(&req); err != nil {
+		log.Println("ERROR: Failed to parse JSON payload:", err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request payload"})
+	}
+	log.Printf("INFO: Received payload - Recharge Type: %s, API Key: %s\n", req.RechargeType, req.APIKey)
+
+	// Validate inputs
+	if req.RechargeType == "" || req.APIKey == "" {
+		log.Println("ERROR: Missing required fields - recharge_type or api_key")
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "API key and recharge_type are required"})
+	}
+	log.Println("INFO: Inputs validated successfully")
+
+	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Check if the recharge type already exists
+	log.Printf("INFO: Checking if recharge_type '%s' exists in the database\n", req.RechargeType)
 	var existingAPI models.RechargeAPI
-	err := rechargeCol.FindOne(ctx, bson.M{"recharge_type": rechargeType}).Decode(&existingAPI)
+	err := rechargeCol.FindOne(ctx, bson.M{"recharge_type": req.RechargeType}).Decode(&existingAPI)
+
+	// Handle document not found
 	if err == mongo.ErrNoDocuments {
-		// Create new API key
+		log.Println("INFO: Recharge type not found, creating a new API key")
 		_, err = rechargeCol.InsertOne(ctx, models.RechargeAPI{
-			RechargeType: rechargeType,
-			APIKey:       apiKey,
+			RechargeType: req.RechargeType,
+			APIKey:       req.APIKey,
 		})
 		if err != nil {
+			log.Println("ERROR: Failed to create API key:", err)
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create API key"})
 		}
+		log.Println("INFO: API key created successfully")
 		return c.JSON(http.StatusCreated, echo.Map{"message": "API key created successfully"})
 	} else if err != nil {
+		log.Println("ERROR: Failed to query recharge API collection:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 
 	// Update existing API key
-	_, err = rechargeCol.UpdateOne(ctx, bson.M{"recharge_type": rechargeType}, bson.M{"$set": bson.M{"api_key": apiKey}})
+	log.Printf("INFO: Recharge type '%s' exists, updating API key\n", req.RechargeType)
+	_, err = rechargeCol.UpdateOne(ctx, bson.M{"recharge_type": req.RechargeType}, bson.M{"$set": bson.M{"api_key": req.APIKey}})
 	if err != nil {
+		log.Println("ERROR: Failed to update API key:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update API key"})
 	}
+
+	// Log success
+	log.Println("INFO: API key updated successfully")
 	return c.JSON(http.StatusOK, echo.Map{"message": "API key updated successfully"})
 }
 

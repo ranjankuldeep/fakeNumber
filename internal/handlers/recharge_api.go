@@ -405,7 +405,47 @@ func ToggleMaintenance(c echo.Context) error {
 }
 
 // GetMaintenanceStatus retrieves the maintenance status.
+
+type MaintenanceResponse struct {
+	Maintenance bool   `json:"maintenance"`
+	Message     string `json:"message,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
 func GetMaintenanceStatus(c echo.Context) error {
-	// Logic for retrieving maintenance status
-	return c.JSON(http.StatusOK, map[string]string{"message": "Maintenance status retrieved successfully"})
+	// Retrieve database instance
+	db := c.Get("db").(*mongo.Database)
+	rechargeCollection := db.Collection("recharge-apis")
+
+	// Parse query parameter
+	rechargeType := c.QueryParam("rechargeType")
+	if rechargeType == "" {
+		return c.JSON(http.StatusBadRequest, MaintenanceResponse{Error: "Recharge type is required"})
+	}
+
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Find the record in the database
+	var record bson.M
+	err := rechargeCollection.FindOne(ctx, bson.M{"recharge_type": rechargeType}).Decode(&record)
+
+	if err == mongo.ErrNoDocuments {
+		// Record not found
+		return c.JSON(http.StatusNotFound, MaintenanceResponse{Message: "Recharge type not found"})
+	} else if err != nil {
+		// Internal server error
+		log.Println("Error fetching maintenance status:", err)
+		return c.JSON(http.StatusInternalServerError, MaintenanceResponse{Error: "Internal server error"})
+	}
+
+	// Return the maintenance status
+	maintenance, ok := record["maintenance"].(bool)
+	if !ok {
+		log.Println("Error: Invalid maintenance status format")
+		return c.JSON(http.StatusInternalServerError, MaintenanceResponse{Error: "Internal server error"})
+	}
+
+	return c.JSON(http.StatusOK, MaintenanceResponse{Maintenance: maintenance})
 }

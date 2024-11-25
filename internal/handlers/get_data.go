@@ -292,7 +292,7 @@ func GetUserServiceData(c echo.Context) error {
 	var maintenanceStatus struct {
 		Maintenance bool `bson:"maintainance"`
 	}
-	serverCollection := db.Collection("server")
+	serverCollection := db.Collection("servers")
 	err = serverCollection.FindOne(context.Background(), bson.M{"server": 0}).Decode(&maintenanceStatus)
 	if err == nil && maintenanceStatus.Maintenance {
 		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})

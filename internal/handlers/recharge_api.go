@@ -370,7 +370,7 @@ func ToggleMaintenance(c echo.Context) error {
 
 	// Define the filter and update
 	filter := bson.M{"recharge_type": input.RechargeType}
-	update := bson.M{"$set": bson.M{"maintainance": input.Status}}
+	update := bson.M{"$set": bson.M{"maintenance": input.Status}}
 
 	// Log the filter and update details
 	log.Printf("INFO: Updating record with filter: %+v and update: %+v\n", filter, update)

@@ -126,10 +126,10 @@ func main() {
 
 func MonitorOrders(db *mongo.Database) {
 	orderCollection := models.InitializeOrderCollection(db)
-
-	ticker := time.NewTicker(3 * time.Second) // Check every 3 seconds
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	// Fetch data only with expired time.
 	for {
 		select {
 		case <-ticker.C:
@@ -238,7 +238,42 @@ func processOrder(order models.Order, db *mongo.Database) {
 		}
 	}
 	if otpArrived {
-		log.Printf("OTP already arrived for transaction %s, skipping third-party call.", order.NumberID)
+		var existingCancelledTransaction models.TransactionHistory
+		err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID, "status": "CANCELLED"}).Decode(&existingCancelledTransaction)
+		if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
+			var transaction models.TransactionHistory
+			formattedData := handlers.FormatDateTime()
+			err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID}).Decode(&transaction)
+			if err != nil {
+				logs.Logger.Error(err)
+				return
+			}
+
+			numberHistory := models.TransactionHistory{
+				UserID:        transaction.UserID,
+				Service:       transaction.Service,
+				Price:         transaction.Price,
+				Server:        serverString,
+				TransactionID: order.NumberID,
+				OTP:           "",
+				Status:        "CANCELLED",
+				Number:        transaction.Number,
+				DateTime:      formattedData,
+			}
+
+			_, err = transactionCollection.InsertOne(ctx, numberHistory)
+			if err != nil {
+				logs.Logger.Error(err)
+				return
+			}
+
+			orderCollection := models.InitializeOrderCollection(db)
+			_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": order.NumberID})
+			if err != nil {
+				logs.Logger.Error(err)
+				return
+			}
+		}
 		return
 	}
 
@@ -250,6 +285,7 @@ func processOrder(order models.Order, db *mongo.Database) {
 		logs.Logger.Error(err)
 		return
 	}
+
 	var existingCancelledTransaction models.TransactionHistory
 	err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID, "status": "CANCELLED"}).Decode(&existingCancelledTransaction)
 	if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
@@ -308,6 +344,13 @@ func processOrder(order models.Order, db *mongo.Database) {
 		constructedNumberRequest, err := handlers.ConstructNumberUrl(server, serverInfo.APIKey, serverInfo.Token, order.NumberID, order.Number)
 		if err != nil {
 			log.Printf("Error constructing third-party request: %v", err)
+			return
+		}
+
+		orderCollection := models.InitializeOrderCollection(db)
+		_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": order.NumberID})
+		if err != nil {
+			logs.Logger.Error(err)
 			return
 		}
 

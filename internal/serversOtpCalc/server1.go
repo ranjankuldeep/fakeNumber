@@ -39,6 +39,10 @@ func GetOTPServer1(otpUrl string, headers map[string]string, id string) ([]strin
 		otp := strings.TrimPrefix(responseText, "STATUS_OK:")
 		return []string{otp}, nil
 	}
+	if strings.HasPrefix(responseText, "STATUS_WAIT_RETRY:") {
+		otp := strings.TrimPrefix(responseText, "STATUS_WAIT_RETRY:")
+		return []string{otp}, nil
+	}
 	switch responseText {
 	case "STATUS_CANCEL":
 		return []string{"STATUS_CANCEL"}, nil

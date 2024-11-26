@@ -8,7 +8,6 @@ import (
 // RegisterApiWalletRoutes sets up routes for API and Wallet operations.
 func RegisterApiWalletRoutes(e *echo.Echo) {
 	apiWalletGroup := e.Group("/api/")
-
 	// Define routes
 	apiWalletGroup.GET("api_key", handlers.ApiKey)
 	apiWalletGroup.GET("balance", handlers.BalanceHandler)

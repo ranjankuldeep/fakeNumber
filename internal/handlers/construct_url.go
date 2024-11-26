@@ -1,13 +1,21 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func constructApiUrl(server, apiKeyServer string, apiToken string, data models.ServerData, isMultiple string) (ApiRequest, error) {
+func constructApiUrl(db *mongo.Database, server, apiKeyServer string, apiToken string, data models.ServerData, isMultiple string) (ApiRequest, error) {
+	marginMap, exchangeMap, err := FetchMarginAndExchangeRate(context.TODO(), db)
+	if err != nil {
+		return ApiRequest{}, err
+	}
+	serverNumber, _ := strconv.Atoi(server)
 	switch server {
 	case "1":
 		return ApiRequest{
@@ -28,10 +36,16 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 		}, nil
 
 	case "3":
+		priceFloat, err := strconv.ParseFloat(data.Price, 64)
+		if err != nil {
+			return ApiRequest{}, fmt.Errorf("invalid price for server %d: %v", serverNumber, err)
+		}
+		priceFloat = (priceFloat - marginMap[serverNumber]) / exchangeMap[serverNumber]
+		priceStr := fmt.Sprintf("%.2f", priceFloat)
 		return ApiRequest{
 			URL: fmt.Sprintf(
 				"https://smshub.org/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22&maxPrice=%s",
-				apiKeyServer, data.Code, data.Price,
+				apiKeyServer, data.Code, priceStr,
 			),
 			Headers: map[string]string{}, // Empty headers
 		}, nil
@@ -64,19 +78,31 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 		}, nil
 
 	case "7":
+		priceFloat, err := strconv.ParseFloat(data.Price, 64)
+		if err != nil {
+			return ApiRequest{}, fmt.Errorf("invalid price for server %d: %v", serverNumber, err)
+		}
+		priceFloat = (priceFloat - marginMap[serverNumber]) / exchangeMap[serverNumber]
+		priceStr := fmt.Sprintf("%.2f", priceFloat)
 		return ApiRequest{
 			URL: fmt.Sprintf(
-				"https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22",
-				apiKeyServer, data.Code,
+				"https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&country=22&maxPrice=%s",
+				apiKeyServer, data.Code, priceStr,
 			),
 			Headers: map[string]string{}, // Empty headers
 		}, nil
 
 	case "8":
+		priceFloat, err := strconv.ParseFloat(data.Price, 64)
+		if err != nil {
+			return ApiRequest{}, fmt.Errorf("invalid price for server %d: %v", serverNumber, err)
+		}
+		priceFloat = (priceFloat - marginMap[serverNumber]) / exchangeMap[serverNumber]
+		priceStr := fmt.Sprintf("%.2f", priceFloat)
 		return ApiRequest{
 			URL: fmt.Sprintf(
-				"https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22",
-				apiKeyServer, data.Code,
+				"https://api.sms-activate.guru/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22&maxPrice=%s",
+				apiKeyServer, data.Code, priceStr,
 			),
 			Headers: map[string]string{}, // Empty headers
 		}, nil
@@ -92,7 +118,7 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 	case "10":
 		return ApiRequest{
 			URL: fmt.Sprintf(
-				"https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getNumber&service=%s&operator=any&country=22 ",
+				"https://sms-activation-service.pro/stubs/handler_api?api_key=%s&action=getNumber&service=%s&operator=any&country=22 ",
 				apiKeyServer, data.Code,
 			),
 			Headers: map[string]string{}, // Empty headers
@@ -160,7 +186,7 @@ func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error)
 		}, nil
 	case "8":
 		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			URL:     fmt.Sprintf("https://api.sms-activate.guru/stubs/handler_api.php?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "9":
@@ -170,7 +196,7 @@ func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error)
 		}, nil
 	case "10":
 		return ApiRequest{
-			URL:     fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
+			URL:     fmt.Sprintf("https://sms-activation-service.pro/stubs/handler_api?api_key=%s&action=getStatus&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "11":
@@ -222,7 +248,7 @@ func ConstructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequ
 		}, nil
 	case "8":
 		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.sms-activate.io/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
+			URL:     fmt.Sprintf("https://api.sms-activate.guru/stubs/handler_api.php?api_key=%s&action=setStatus&status=8&id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "9":
@@ -232,7 +258,7 @@ func ConstructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequ
 		}, nil
 	case "10":
 		return ApiRequest{
-			URL:     fmt.Sprintf("https://sms-activation-service.com/stubs/handler_api?api_key=%s&action=setStatus&id=%s&status=8", apiKeyServer, id),
+			URL:     fmt.Sprintf("https://sms-activation-service.pro/stubs/handler_api?api_key=%s&action=setStatus&id=%s&status=8", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	case "11":

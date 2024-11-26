@@ -93,7 +93,7 @@ func GetNumberHandlerApi(c echo.Context) error {
 	}
 
 	isMultiple := "false"
-	apiURLRequest, err := constructApiUrl(server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
+	apiURLRequest, err := constructApiUrl(db, server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
 	if err != nil {
 		logs.Logger.Error("Couldn't construcrt api url")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})

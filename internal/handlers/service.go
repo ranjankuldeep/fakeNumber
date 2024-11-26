@@ -169,6 +169,13 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
+	var expirationTime time.Time
+	switch server {
+	case "1", "2", "3", "4", "5", "6", "8", "9", "10", "11":
+		expirationTime = time.Now().Add(19 * time.Minute)
+	case "7":
+		expirationTime = time.Now().Add(9 * time.Minute)
+	}
 
 	orderCollection := models.InitializeOrderCollection(db)
 	order := models.Order{
@@ -180,83 +187,13 @@ func HandleGetNumberRequest(c echo.Context) error {
 		NumberID:       numData.Id,
 		Number:         numData.Number,
 		OrderTime:      time.Now(),
-		ExpirationTime: time.Now().Add(20 * time.Minute),
+		ExpirationTime: expirationTime,
 	}
 	_, err = orderCollection.InsertOne(ctx, order)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	logs.Logger.Info(numData.Id, numData.Number)
-
-	go func(id, number, userId string, db *mongo.Database, ctx context.Context) {
-		defer func() {
-			if r := recover(); r != nil {
-				logs.Logger.Error("Recovered from panic in OTP handling goroutine:", r)
-			}
-		}()
-		// number cancel handle after 19 minutes
-
-		var waitDuration time.Duration
-		switch server {
-		case "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11":
-			waitDuration = 19 * time.Minute
-		}
-		time.Sleep(waitDuration)
-
-		// Fetch server data with maintenance check
-		serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-
-		var transactionData []models.TransactionHistory
-		transactionCollection := models.InitializeTransactionHistoryCollection(db)
-
-		filter := bson.M{
-			"userId": userId,
-			"id":     id,
-		}
-		cursor, err := transactionCollection.Find(ctx, filter)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-		defer cursor.Close(ctx)
-
-		if err := cursor.All(ctx, &transactionData); err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-
-		if len(transactionData) == 0 {
-			return
-		}
-
-		otpArrived := false
-		for _, transaction := range transactionData {
-			if transaction.OTP != "" && transaction.OTP != "STATUS_WAIT_CODE" && transaction.OTP != "STATUS_CANCEL" {
-				otpArrived = true
-				break
-			}
-		}
-		if otpArrived {
-			logs.Logger.Infof("OTP already arrived for transaction %s, skipping third-party call.", id)
-			return
-		}
-
-		constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, number)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-
-		err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-	}(numData.Id, numData.Number, apiWalletUser.UserID.Hex(), db, ctx)
 
 	if numData.Id == "" || numData.Number == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
@@ -430,7 +367,7 @@ func round(val float64, precision int) float64 {
 	return result
 }
 
-func formatDateTime() string {
+func FormatDateTime() string {
 	return time.Now().Format("01/02/2006T03:04:05 PM")
 }
 
@@ -497,7 +434,7 @@ func HandleGetOtp(c echo.Context) error {
 
 		err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
 		if err == mongo.ErrNoDocuments || err == mongo.ErrEmptySlice {
-			formattedDateTime := formatDateTime()
+			formattedDateTime := FormatDateTime()
 
 			var transaction models.TransactionHistory
 			err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
@@ -900,7 +837,7 @@ func HandleNumberCancel(c echo.Context) error {
 	}
 
 	// if otp didn't arrived then cancel the number
-	constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, existingOrder.Number)
+	constructedNumberRequest, err := ConstructNumberUrl(server, serverData.APIKey, serverData.Token, id, existingOrder.Number)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
@@ -918,9 +855,8 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	// if no existing entry found with status cancelled then make a new transaction with status cancelled.
 	var transaction models.TransactionHistory
-	formattedData := formatDateTime()
+	formattedData := FormatDateTime()
 
 	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
 	if err != nil {
@@ -948,13 +884,16 @@ func HandleNumberCancel(c echo.Context) error {
 
 	// Refund the balance if no otp arrived
 	price, err := strconv.ParseFloat(transaction.Price, 64)
+	if err != nil {
+		logs.Logger.Error(err)
+	}
 	newBalance := apiWalletUser.Balance + price
 	newBalance = math.Round(newBalance*100) / 100
 
 	update := bson.M{
 		"$set": bson.M{"balance": newBalance},
 	}
-	balanceFilter := bson.M{"_id": apiWalletUser.UserID}
+	balanceFilter := bson.M{"userId": apiWalletUser.UserID}
 
 	_, err = apiWalletColl.UpdateOne(ctx, balanceFilter, update)
 	if err != nil {
@@ -1008,16 +947,17 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 
 	case "2":
+		if strings.Contains(responseData, "order has sms") {
+			return nil
+		} else if strings.Contains(responseData, "order not found") {
+			return nil
+		}
 		var responseDataJSON map[string]interface{}
 		err = json.Unmarshal(body, &responseDataJSON)
 		if err != nil {
 			return fmt.Errorf("failed to parse JSON response: %w", err)
 		}
 		if responseDataJSON["status"] == "CANCELED" {
-			return nil
-		} else if responseDataJSON["status"] == "order has sms" {
-			return nil
-		} else if responseDataJSON["status"] == "order not found" {
 			return nil
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))

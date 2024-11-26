@@ -217,7 +217,7 @@ func GetNumberHandlerApi(c echo.Context) error {
 			return
 		}
 
-		constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, number)
+		constructedNumberRequest, err := ConstructNumberUrl(server, serverData.APIKey, serverData.Token, id, number)
 		if err != nil {
 			logs.Logger.Error(err)
 			return
@@ -304,7 +304,7 @@ func GetOTPHandlerApi(c echo.Context) error {
 
 		err = transactionCollection.FindOne(ctx, bson.M{"id": id, "otp": validOtp}).Decode(&existingEntry)
 		if err == mongo.ErrNoDocuments || err == mongo.ErrEmptySlice {
-			formattedDateTime := formatDateTime()
+			formattedDateTime := FormatDateTime()
 
 			var transaction models.TransactionHistory
 			err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
@@ -477,7 +477,7 @@ func CancelNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "otp already come"})
 	}
 
-	constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, existingOrder.Number)
+	constructedNumberRequest, err := ConstructNumberUrl(server, serverData.APIKey, serverData.Token, id, existingOrder.Number)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid server"})
@@ -496,7 +496,7 @@ func CancelNumberHandlerApi(c echo.Context) error {
 	}
 
 	var transaction models.TransactionHistory
-	formattedData := formatDateTime()
+	formattedData := FormatDateTime()
 
 	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
 	if err != nil {

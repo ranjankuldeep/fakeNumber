@@ -183,7 +183,7 @@ func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error)
 	}
 }
 
-func constructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequest, error) {
+func ConstructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequest, error) {
 	switch server {
 	case "1":
 		return ApiRequest{

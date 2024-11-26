@@ -45,20 +45,9 @@ func ApiKey(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "userId is required"})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// isMaintenance, err := checkMaintenance(ctx, serverCol)
-	// if err != nil {
-	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-	// }
-	// if isMaintenance {
-	// 	return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
-	// }
-
 	var user models.ApiWalletUser
 	objID, _ := primitive.ObjectIDFromHex(userId)
-	err := walletCol.FindOne(ctx, bson.M{"userId": objID}).Decode(&user)
+	err := walletCol.FindOne(context.TODO(), bson.M{"userId": objID}).Decode(&user)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
 	}

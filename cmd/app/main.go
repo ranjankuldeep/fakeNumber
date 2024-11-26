@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -13,8 +16,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
+	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/internal/handlers"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
+	"github.com/ranjankuldeep/fakeNumber/logs"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func Load(envFile string) {
@@ -106,5 +115,201 @@ func main() {
 	routes.RegisterServerDiscountRoutes(e)
 	routes.RegisterApisRoutes(e)
 
+	go MonitorOrders(db)
 	e.Logger.Fatal(e.Start(":8000"))
+}
+
+func MonitorOrders(db *mongo.Database) {
+	orderCollection := models.InitializeOrderCollection(db)
+
+	ticker := time.NewTicker(3 * time.Second) // Check every 3 seconds
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			var orders []models.Order
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			cursor, err := orderCollection.Find(ctx, bson.M{})
+			if err != nil {
+				log.Printf("Error finding orders: %v", err)
+				continue
+			}
+			defer cursor.Close(ctx)
+
+			if err := cursor.All(ctx, &orders); err != nil {
+				log.Printf("Error decoding orders: %v", err)
+				continue
+			}
+
+			for _, order := range orders {
+				go handleOrder(order.UserID, db) // Trigger a goroutine for each order
+			}
+		}
+	}
+}
+
+// handleOrder processes an individual order for expiration and OTP handling
+func handleOrder(userId primitive.ObjectID, db *mongo.Database) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic in OTP handling goroutine: %v", r)
+		}
+	}()
+
+	orderCollection := models.InitializeOrderCollection(db)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	orderFilter := bson.M{"userId": userId}
+	cursor, err := orderCollection.Find(ctx, orderFilter)
+	if err != nil {
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var orders []models.Order
+	for cursor.Next(ctx) {
+		var order models.Order
+		if err := cursor.Decode(&order); err != nil {
+			log.Printf("Error decoding order: %v", err)
+			return
+		}
+		orders = append(orders, order)
+	}
+
+	if err := cursor.Err(); err != nil {
+		log.Printf("Cursor error: %v", err)
+		return
+	}
+
+	for _, order := range orders {
+		go processOrder(order, db)
+	}
+}
+
+// processOrder handles expiration logic and checks OTP status for an order
+func processOrder(order models.Order, db *mongo.Database) {
+	serverInt := order.Server
+	serverString := strconv.Itoa(serverInt)
+
+	expirationTime := order.ExpirationTime
+	currentTime := time.Now()
+
+	if currentTime.Before(expirationTime) {
+		return
+	}
+
+	// Check transaction history and OTP status
+	transactionCollection := models.InitializeTransactionHistoryCollection(db)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	transactionFilter := bson.M{
+		"userId": order.UserID.Hex(),
+		"id":     order.NumberID,
+	}
+
+	cursor, err := transactionCollection.Find(ctx, transactionFilter)
+	if err != nil {
+		log.Printf("Error finding transactions for order %s: %v", order.NumberID, err)
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var transactionData []models.TransactionHistory
+	if err := cursor.All(ctx, &transactionData); err != nil {
+		log.Printf("Error decoding transaction data: %v", err)
+		return
+	}
+
+	otpArrived := false
+	for _, transaction := range transactionData {
+		if transaction.OTP != "" && transaction.OTP != "STATUS_WAIT_CODE" && transaction.OTP != "STATUS_CANCEL" {
+			otpArrived = true
+			break
+		}
+	}
+	if otpArrived {
+		log.Printf("OTP already arrived for transaction %s, skipping third-party call.", order.NumberID)
+		return
+	}
+
+	// Refund the balnce
+	var apiWalletUser models.ApiWalletUser
+	apiWalletColl := models.InitializeApiWalletuserCollection(db)
+	err = apiWalletColl.FindOne(ctx, bson.M{"userId": order.UserID}).Decode(&apiWalletUser)
+	if err != nil || err == mongo.ErrEmptySlice {
+		logs.Logger.Error(err)
+		return
+	}
+	var existingCancelledTransaction models.TransactionHistory
+	err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID, "status": "CANCELLED"}).Decode(&existingCancelledTransaction)
+	if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
+		var transaction models.TransactionHistory
+		formattedData := handlers.FormatDateTime()
+		err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID}).Decode(&transaction)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+
+		numberHistory := models.TransactionHistory{
+			UserID:        transaction.UserID,
+			Service:       transaction.Service,
+			Price:         transaction.Price,
+			Server:        serverString,
+			TransactionID: order.NumberID,
+			OTP:           "",
+			Status:        "CANCELLED",
+			Number:        transaction.Number,
+			DateTime:      formattedData,
+		}
+
+		_, err = transactionCollection.InsertOne(ctx, numberHistory)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+
+		// Refund the balance if no otp arrived
+		price, err := strconv.ParseFloat(transaction.Price, 64)
+		newBalance := apiWalletUser.Balance + price
+		newBalance = math.Round(newBalance*100) / 100
+
+		update := bson.M{
+			"$set": bson.M{"balance": newBalance},
+		}
+		balanceFilter := bson.M{"userId": apiWalletUser.UserID}
+
+		_, err = apiWalletColl.UpdateOne(ctx, balanceFilter, update)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
+
+		// Perform third-party cancellation
+		var serverInfo models.Server
+		serverCollection := models.InitializeServerCollection(db)
+		err = serverCollection.FindOne(ctx, bson.M{"server": order.Server}).Decode(&serverInfo)
+		if err != nil {
+			log.Printf("Error finding server info for order %s: %v", order.NumberID, err)
+			return
+		}
+
+		server := strconv.Itoa(serverInfo.ServerNumber)
+		constructedNumberRequest, err := handlers.ConstructNumberUrl(server, serverInfo.APIKey, serverInfo.Token, order.NumberID, order.Number)
+		if err != nil {
+			log.Printf("Error constructing third-party request: %v", err)
+			return
+		}
+
+		err = handlers.CancelNumberThirdParty(constructedNumberRequest.URL, server, order.NumberID, db, constructedNumberRequest.Headers)
+		if err != nil {
+			log.Printf("Error canceling number via third party: %v", err)
+			return
+		}
+	}
 }

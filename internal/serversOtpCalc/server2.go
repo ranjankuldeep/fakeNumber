@@ -57,7 +57,7 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) ([]
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to read response body: %w", err)
 	}
-
+	logs.Logger.Info(string(body))
 	var otpResponse OTPResponse
 	err = json.Unmarshal(body, &otpResponse)
 	if err != nil {
@@ -71,6 +71,9 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) ([]
 	}
 
 	if otpResponse.Status == "CANCELED" {
+		return []string{"STATUS_CANCEL"}, nil
+	}
+	if otpResponse.Status == "TIMEOUT" {
 		return []string{"STATUS_CANCEL"}, nil
 	}
 	if len(smsTexts) == 0 {

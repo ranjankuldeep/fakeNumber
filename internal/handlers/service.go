@@ -194,10 +194,12 @@ func HandleGetNumberRequest(c echo.Context) error {
 				logs.Logger.Error("Recovered from panic in OTP handling goroutine:", r)
 			}
 		}()
+		// number cancel handle after 19 minutes
+
 		var waitDuration time.Duration
 		switch server {
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11":
-			waitDuration = 3 * time.Minute
+			waitDuration = 19 * time.Minute
 		}
 		time.Sleep(waitDuration)
 

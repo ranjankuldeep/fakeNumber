@@ -101,16 +101,16 @@ func constructApiUrl(server, apiKeyServer string, apiToken string, data models.S
 		if isMultiple == "true" {
 			return ApiRequest{
 				URL: fmt.Sprintf(
-					"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=true",
-					apiToken,
+					"https://api.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=true",
+					apiKeyServer, data.Code,
 				),
 				Headers: map[string]string{}, // Empty headers
 			}, nil
 		} else {
 			return ApiRequest{
 				URL: fmt.Sprintf(
-					"https://api.sms-man.com/control/get-number?token=%s&application_id=1491&country_id=14&hasMultipleSms=false",
-					apiToken,
+					"https://api.sms-man.com/control/get-number?token=%s&application_id=%s&country_id=14&hasMultipleSms=false",
+					apiKeyServer, data.Code,
 				),
 				Headers: map[string]string{}, // Empty headers
 			}, nil

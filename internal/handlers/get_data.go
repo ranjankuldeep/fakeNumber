@@ -465,7 +465,6 @@ func GetServiceDataAdmin(c echo.Context) error {
 	}
 	log.Println("INFO: Discount maps created")
 
-	// Sort and process server list data
 	log.Println("INFO: Sorting server list data...")
 	sort.Slice(serverListData, func(i, j int) bool {
 		return serverListData[i].Name < serverListData[j].Name
@@ -477,11 +476,8 @@ func GetServiceDataAdmin(c echo.Context) error {
 		})
 
 		for j, server := range service.Servers {
-			// Compute discounts
 			serviceKey := service.Name + "_" + strconv.Itoa(server.ServerNumber)
 			discount := serviceDiscountMap[serviceKey] + serverDiscountMap[server.ServerNumber]
-
-			// Apply discounts to the server price
 			originalPrice, err := strconv.ParseFloat(server.Price, 64)
 			if err != nil {
 				log.Printf("ERROR: Invalid price format for service %s, server %d: %v\n", service.Name, server.ServerNumber, err)
@@ -491,8 +487,6 @@ func GetServiceDataAdmin(c echo.Context) error {
 			serverListData[i].Servers[j].Price = strconv.FormatFloat(finalPrice, 'f', 2, 64)
 		}
 	}
-	log.Println("INFO: Successfully processed server list data")
-
 	return c.JSON(http.StatusOK, serverListData)
 }
 

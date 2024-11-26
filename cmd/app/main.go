@@ -115,6 +115,11 @@ func main() {
 	routes.RegisterServerDiscountRoutes(e)
 	routes.RegisterApisRoutes(e)
 
+	// update the server data
+	err = UpdateServerData(db, context.TODO())
+	if err != nil {
+		logs.Logger.Error(err)
+	}
 	go MonitorOrders(db)
 	e.Logger.Fatal(e.Start(":8000"))
 }

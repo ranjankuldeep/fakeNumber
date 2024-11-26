@@ -388,17 +388,17 @@ func ExtractNumber(server string, apiURLRequest ApiRequest) (NumberData, error) 
 }
 func FetchDiscount(ctx context.Context, db *mongo.Database, userId, sname string, server int) (float64, error) {
 	totalDiscount := 0.0
+	userIdObject, _ := primitive.ObjectIDFromHex(userId)
 
 	// User-specific discount
 	userDiscountCollection := models.InitializeUserDiscountCollection(db)
 	var userDiscount models.UserDiscount
-	err := userDiscountCollection.FindOne(ctx, bson.M{"userId": userId, "service": sname, "server": server}).Decode(&userDiscount)
+	err := userDiscountCollection.FindOne(ctx, bson.M{"userId": userIdObject, "service": sname, "server": server}).Decode(&userDiscount)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return 0, err
 	}
-	if err == nil {
-		totalDiscount += round(userDiscount.Discount, 2)
-	}
+
+	totalDiscount += round(userDiscount.Discount, 2)
 
 	// Service discount
 	serviceDiscountCollection := models.InitializeServiceDiscountCollection(db)
@@ -407,9 +407,7 @@ func FetchDiscount(ctx context.Context, db *mongo.Database, userId, sname string
 	if err != nil && err != mongo.ErrNoDocuments {
 		return 0, err
 	}
-	if err == nil {
-		totalDiscount += round(serviceDiscount.Discount, 2)
-	}
+	totalDiscount += round(serviceDiscount.Discount, 2)
 
 	serverDiscountCollection := models.InitializeServerDiscountCollection(db)
 	var serverDiscount models.ServerDiscount
@@ -899,6 +897,7 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "otp already come"})
 	}
 
+	// if otp didn't arrived then cancel the number
 	constructedNumberRequest, err := constructNumberUrl(server, serverData.APIKey, serverData.Token, id, existingOrder.Number)
 	if err != nil {
 		logs.Logger.Error(err)
@@ -945,6 +944,7 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
+	// Refund the balance if no otp arrived
 	price, err := strconv.ParseFloat(transaction.Price, 64)
 	newBalance := apiWalletUser.Balance + price
 	newBalance = math.Round(newBalance*100) / 100

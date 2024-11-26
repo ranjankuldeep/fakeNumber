@@ -483,16 +483,16 @@ func CancelNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid server"})
 	}
 
-	_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	}
-
 	err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
 	var transaction models.TransactionHistory

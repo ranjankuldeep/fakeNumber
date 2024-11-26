@@ -17,7 +17,7 @@ import (
 
 func AddUserDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("user-discounts")
+	userDiscountCollection := models.InitializeUserDiscountCollection(db)
 	userCollection := models.InitializeUserCollection(db)
 
 	var req struct {
@@ -49,7 +49,7 @@ func AddUserDiscount(c echo.Context) error {
 // GetUserDiscount retrieves all discounts for a specific user
 func GetUserDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("user-discounts")
+	userDiscountCollection := models.InitializeUserDiscountCollection(db)
 
 	userID := c.QueryParam("userId")
 	if userID == "" {
@@ -81,7 +81,7 @@ func GetUserDiscount(c echo.Context) error {
 // DeleteUserDiscount deletes a specific user discount by service and server
 func DeleteUserDiscount(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("user-discounts")
+	userDiscountCollection := models.InitializeUserDiscountCollection(db)
 
 	userID := c.QueryParam("userId")
 	service := c.QueryParam("service")
@@ -113,7 +113,7 @@ func GetAllUserDiscounts(c echo.Context) error {
 	log.Println("INFO: Starting GetAllUserDiscounts handler")
 
 	db := c.Get("db").(*mongo.Database)
-	userDiscountCollection := db.Collection("user-discounts")
+	userDiscountCollection := models.InitializeUserDiscountCollection(db)
 	userCollection := db.Collection("users")
 
 	log.Println("INFO: Fetching all user discounts from the database...")

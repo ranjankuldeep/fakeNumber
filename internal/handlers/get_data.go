@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -531,9 +532,10 @@ func loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDisc
 	}
 
 	// Load user discounts if userId is provided
+	userIdObject, _ := primitive.ObjectIDFromHex(userId)
 	userDiscounts := make(map[string]float64)
 	if userId != "" {
-		userCursor, _ := userDiscountCollection.Find(context.Background(), bson.M{"userId": userId})
+		userCursor, _ := userDiscountCollection.Find(context.Background(), bson.M{"userId": userIdObject})
 		defer userCursor.Close(context.Background())
 		for userCursor.Next(context.Background()) {
 			var discount models.UserDiscount

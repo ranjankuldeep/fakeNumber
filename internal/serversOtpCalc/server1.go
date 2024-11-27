@@ -45,15 +45,12 @@ func GetOTPServer1(otpUrl string, headers map[string]string, id string) ([]strin
 	}
 	switch responseText {
 	case "STATUS_CANCEL":
-		return []string{"STATUS_CANCEL"}, nil
+		return []string{}, fmt.Errorf("ACCESS_CANCEL")
 	case "STATUS_WAIT_CODE":
-		return []string{"STATUS_WAIT_CODE"}, nil
-	}
-	if strings.Contains(responseText, "STATUS_WAIT_RETRY") {
-		return []string{"STATUS_WAIT_CODE"}, nil
+		return []string{}, nil
 	}
 	if strings.Contains(responseText, "ACCESS_CANCEL") {
-		return []string{"STATUS_CANCEL"}, nil
+		return []string{}, fmt.Errorf("ACCESS_CANCEL")
 	}
 	if strings.Contains(responseText, "STATUS_WAIT_RESEND") {
 		return []string{}, nil

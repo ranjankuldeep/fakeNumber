@@ -197,9 +197,6 @@ func handleOrder(userId primitive.ObjectID, db *mongo.Database) {
 
 // processOrder handles expiration logic and checks OTP status for an order
 func processOrder(order models.Order, db *mongo.Database) {
-	serverInt := order.Server
-	serverString := strconv.Itoa(serverInt)
-
 	expirationTime := order.ExpirationTime
 	currentTime := time.Now()
 
@@ -207,7 +204,6 @@ func processOrder(order models.Order, db *mongo.Database) {
 		return
 	}
 
-	// Check transaction history and OTP status
 	transactionCollection := models.InitializeTransactionHistoryCollection(db)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -217,62 +213,50 @@ func processOrder(order models.Order, db *mongo.Database) {
 		"id":     order.NumberID,
 	}
 
-	cursor, err := transactionCollection.Find(ctx, transactionFilter)
+	var transactionData models.TransactionHistory
+	err := transactionCollection.FindOne(ctx, transactionFilter).Decode(&transactionData)
 	if err != nil {
 		log.Printf("Error finding transactions for order %s: %v", order.NumberID, err)
 		return
 	}
-	defer cursor.Close(ctx)
 
-	var transactionData []models.TransactionHistory
-	if err := cursor.All(ctx, &transactionData); err != nil {
-		log.Printf("Error decoding transaction data: %v", err)
+	otpArrived := false
+	if len(transactionData.OTP) != 0 {
+		otpArrived = true
+		return
+	}
+	if otpArrived == true {
 		return
 	}
 
-	otpArrived := false
-	for _, transaction := range transactionData {
-		if transaction.OTP != "" && transaction.OTP != "STATUS_WAIT_CODE" && transaction.OTP != "STATUS_CANCEL" {
-			otpArrived = true
-			break
-		}
-	}
+	formattedData := handlers.FormatDateTime()
 	if otpArrived {
-		var existingCancelledTransaction models.TransactionHistory
-		err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID, "status": "CANCELLED"}).Decode(&existingCancelledTransaction)
-		if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
-			var transaction models.TransactionHistory
-			formattedData := handlers.FormatDateTime()
-			err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID}).Decode(&transaction)
-			if err != nil {
-				logs.Logger.Error(err)
-				return
-			}
+		var existingTransaction models.TransactionHistory
+		err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID}).Decode(&existingTransaction)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
 
-			numberHistory := models.TransactionHistory{
-				UserID:        transaction.UserID,
-				Service:       transaction.Service,
-				Price:         transaction.Price,
-				Server:        serverString,
-				TransactionID: order.NumberID,
-				OTP:           "",
-				Status:        "CANCELLED",
-				Number:        transaction.Number,
-				DateTime:      formattedData,
-			}
+		transactionUpdateFilter := bson.M{"id": order.NumberID}
+		transactionpdate := bson.M{
+			"$set": bson.M{
+				"status":    "CANCELLED",
+				"date_time": formattedData,
+			},
+		}
 
-			_, err = transactionCollection.InsertOne(ctx, numberHistory)
-			if err != nil {
-				logs.Logger.Error(err)
-				return
-			}
+		_, err = transactionCollection.UpdateOne(ctx, transactionUpdateFilter, transactionpdate)
+		if err != nil {
+			logs.Logger.Error(err)
+			return
+		}
 
-			orderCollection := models.InitializeOrderCollection(db)
-			_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": order.NumberID})
-			if err != nil {
-				logs.Logger.Error(err)
-				return
-			}
+		orderCollection := models.InitializeOrderCollection(db)
+		_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": order.NumberID})
+		if err != nil {
+			logs.Logger.Error(err)
+			return
 		}
 		return
 	}
@@ -287,77 +271,68 @@ func processOrder(order models.Order, db *mongo.Database) {
 	}
 
 	var existingCancelledTransaction models.TransactionHistory
-	err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID, "status": "CANCELLED"}).Decode(&existingCancelledTransaction)
-	if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
-		var transaction models.TransactionHistory
-		formattedData := handlers.FormatDateTime()
-		err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID}).Decode(&transaction)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
+	err = transactionCollection.FindOne(ctx, bson.M{"id": order.NumberID}).Decode(&existingCancelledTransaction)
+	if err != nil {
+		logs.Logger.Error(err)
+		return
+	}
 
-		numberHistory := models.TransactionHistory{
-			UserID:        transaction.UserID,
-			Service:       transaction.Service,
-			Price:         transaction.Price,
-			Server:        serverString,
-			TransactionID: order.NumberID,
-			OTP:           "",
-			Status:        "CANCELLED",
-			Number:        transaction.Number,
-			DateTime:      formattedData,
-		}
+	transactionUpdateFilter := bson.M{"id": order.NumberID}
+	transactionpdate := bson.M{
+		"$set": bson.M{
+			"status":    "CANCELLED",
+			"date_time": formattedData,
+		},
+	}
 
-		_, err = transactionCollection.InsertOne(ctx, numberHistory)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
+	_, err = transactionCollection.UpdateOne(ctx, transactionUpdateFilter, transactionpdate)
+	if err != nil {
+		logs.Logger.Error(err)
+		return
+	}
 
-		// Refund the balance if no otp arrived
-		price, err := strconv.ParseFloat(transaction.Price, 64)
-		newBalance := apiWalletUser.Balance + price
-		newBalance = math.Round(newBalance*100) / 100
+	// Refund the balance if no otp arrived
+	price, err := strconv.ParseFloat(existingCancelledTransaction.Price, 64)
+	newBalance := apiWalletUser.Balance + price
+	newBalance = math.Round(newBalance*100) / 100
 
-		update := bson.M{
-			"$set": bson.M{"balance": newBalance},
-		}
-		balanceFilter := bson.M{"userId": apiWalletUser.UserID}
+	update := bson.M{
+		"$set": bson.M{"balance": newBalance},
+	}
+	balanceFilter := bson.M{"userId": apiWalletUser.UserID}
 
-		_, err = apiWalletColl.UpdateOne(ctx, balanceFilter, update)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
+	_, err = apiWalletColl.UpdateOne(ctx, balanceFilter, update)
+	if err != nil {
+		logs.Logger.Error(err)
+		return
+	}
 
-		// Perform third-party cancellation
-		var serverInfo models.Server
-		serverCollection := models.InitializeServerCollection(db)
-		err = serverCollection.FindOne(ctx, bson.M{"server": order.Server}).Decode(&serverInfo)
-		if err != nil {
-			log.Printf("Error finding server info for order %s: %v", order.NumberID, err)
-			return
-		}
+	// Perform third-party cancellation
+	var serverInfo models.Server
+	serverCollection := models.InitializeServerCollection(db)
+	err = serverCollection.FindOne(ctx, bson.M{"server": order.Server}).Decode(&serverInfo)
+	if err != nil {
+		log.Printf("Error finding server info for order %s: %v", order.NumberID, err)
+		return
+	}
 
-		server := strconv.Itoa(serverInfo.ServerNumber)
-		constructedNumberRequest, err := handlers.ConstructNumberUrl(server, serverInfo.APIKey, serverInfo.Token, order.NumberID, order.Number)
-		if err != nil {
-			log.Printf("Error constructing third-party request: %v", err)
-			return
-		}
+	server := strconv.Itoa(serverInfo.ServerNumber)
+	constructedNumberRequest, err := handlers.ConstructNumberUrl(server, serverInfo.APIKey, serverInfo.Token, order.NumberID, order.Number)
+	if err != nil {
+		log.Printf("Error constructing third-party request: %v", err)
+		return
+	}
 
-		orderCollection := models.InitializeOrderCollection(db)
-		_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": order.NumberID})
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
+	orderCollection := models.InitializeOrderCollection(db)
+	_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": order.NumberID})
+	if err != nil {
+		logs.Logger.Error(err)
+		return
+	}
 
-		err = handlers.CancelNumberThirdParty(constructedNumberRequest.URL, server, order.NumberID, db, constructedNumberRequest.Headers)
-		if err != nil {
-			log.Printf("Error canceling number via third party: %v", err)
-			return
-		}
+	err = handlers.CancelNumberThirdParty(constructedNumberRequest.URL, server, order.NumberID, db, constructedNumberRequest.Headers)
+	if err != nil {
+		log.Printf("Error canceling number via third party: %v", err)
+		return
 	}
 }

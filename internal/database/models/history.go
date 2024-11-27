@@ -22,7 +22,7 @@ type TransactionHistory struct {
 	UserID        string             `bson:"userId" json:"userId"`
 	TransactionID string             `bson:"id" json:"id"`
 	Number        string             `bson:"number" json:"number"`
-	OTP           string             `bson:"otp" json:"otp"`
+	OTP           []string           `bson:"otp" json:"otp"`
 	DateTime      string             `bson:"date_time" json:"date_time"`
 	Service       string             `bson:"service" json:"service"`
 	Server        string             `bson:"server" json:"server"`

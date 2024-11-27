@@ -68,8 +68,6 @@ func UpdateServerData(db *mongo.Database, ctx context.Context) error {
 		logs.Logger.Error(err)
 		return err
 	}
-	logs.Logger.Info(marginMap)
-	logs.Logger.Info(exchangeMap)
 
 	for serviceIndex, service := range serverData {
 		for serverIndex, server := range service.Servers {

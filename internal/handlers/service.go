@@ -474,7 +474,6 @@ func HandleGetOtp(c echo.Context) error {
 			logs.Logger.Error(err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	for _, validOtp := range validOtpList {
@@ -1066,6 +1065,7 @@ func fetchOTP(server, id string, otpRequest ApiRequest) ([]string, error) {
 	case "1", "3", "4", "5", "6", "7", "8", "10":
 		otp, err := serversotpcalc.GetOTPServer1(otpRequest.URL, otpRequest.Headers, id)
 		if err != nil && err.Error() == "ACCESS_CANCEL" {
+			logs.Logger.Error(err)
 			return otpData, err
 		}
 		otpData = append(otpData, otp...)

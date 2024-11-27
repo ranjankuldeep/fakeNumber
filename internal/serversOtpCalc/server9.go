@@ -71,7 +71,7 @@ func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) ([
 	if otpResponse.Code == "210" {
 		return []string{}, errors.New(otpResponse.Message)
 	} else if otpResponse.Code == "245" {
-		return []string{"STATUS_CANCEL"}, nil
+		return []string{}, fmt.Errorf("ACCESS_CANCEL")
 	} else if otpResponse.Code != "200" {
 		return []string{}, errors.New(otpResponse.Message)
 
@@ -81,7 +81,7 @@ func FetchTokenAndOTP(otpURL, serialNumber string, headers map[string]string) ([
 		if vc.Vc != "" {
 			return []string{vc.Vc}, nil
 		} else if vc.Vc == "" {
-			return []string{"STATUS_WAIT_CODE"}, nil
+			return []string{}, nil
 		}
 	}
 	return []string{}, errors.New("NO_OTP_FOUND")

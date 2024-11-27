@@ -83,7 +83,7 @@ func processOTPResponseString(resp OTPServer11ResponseString) ([]string, error) 
 
 func processOTPResponseInt(resp OTPServer11ResponseInt) ([]string, error) {
 	if resp.ErrorCode == "wait_sms" {
-		return []string{"STATUS_WAIT_CODE"}, nil
+		return []string{}, nil
 	}
 
 	if resp.ErrorCode == "wrong_status" {

@@ -223,10 +223,6 @@ func processOrder(order models.Order, db *mongo.Database) {
 	otpArrived := false
 	if len(transactionData.OTP) != 0 {
 		otpArrived = true
-		return
-	}
-	if otpArrived == true {
-		return
 	}
 
 	formattedData := handlers.FormatDateTime()

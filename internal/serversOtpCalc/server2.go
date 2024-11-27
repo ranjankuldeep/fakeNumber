@@ -71,13 +71,13 @@ func GetSMSTextsServer2(otpURL string, id string, headers map[string]string) ([]
 	}
 
 	if otpResponse.Status == "CANCELED" {
-		return []string{"STATUS_CANCEL"}, nil
+		return []string{}, fmt.Errorf("ACCESS_CANCEL")
 	}
 	if otpResponse.Status == "TIMEOUT" {
-		return []string{"STATUS_CANCEL"}, nil
+		return []string{}, fmt.Errorf("ACCESS_CANCEL")
 	}
 	if len(smsTexts) == 0 {
-		return []string{"STATUS_WAIT_CODE"}, nil
+		return []string{}, nil
 	}
 	return smsTexts, nil
 }

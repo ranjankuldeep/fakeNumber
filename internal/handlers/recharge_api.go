@@ -264,8 +264,6 @@ func RechargeTrxApi(c echo.Context) error {
 	}
 	log.Println("INFO: Recharge history saved successfully for hash:", hash)
 
-	// after recharge save, send the transaction
-
 	userIdObject, _ := primitive.ObjectIDFromHex(userId)
 	var apiWalletUser models.ApiWalletUser
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
@@ -281,6 +279,18 @@ func RechargeTrxApi(c echo.Context) error {
 	if err != nil {
 		logs.Logger.Error(err)
 	}
+
+	var user models.User
+	userCollection := models.InitializeUserCollection(db)
+	err = userCollection.FindOne(context.TODO(), bson.M{"_id": userIdObject}).Decode(&user)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "",
+		})
+	}
+
+	unsendTrxColl := models.InitializeUnsendTrxCollection(db)
 	toAddress := adminWallet.APIKey
 	fromAddress := apiWalletUser.TRXAddress
 	privateKey := apiWalletUser.TRXPrivateKey
@@ -304,22 +314,10 @@ func RechargeTrxApi(c echo.Context) error {
 			"error": "",
 		})
 	}
-	var user models.User
-	userCollection := models.InitializeUserCollection(db)
-	err = userCollection.FindOne(context.TODO(), bson.M{"_id": userIdObject}).Decode(&user)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "",
-		})
-	}
-
-	unsendTrxColl := models.InitializeUnsendTrxCollection(db)
 	var responseData ResponseStructure
 
 	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
 		log.Println("Failed to unmarshal response:", err)
-
 		unsendTrx := models.UnsendTrx{
 			Email:         user.Email,
 			TrxAddress:    apiWalletUser.TRXAddress,

@@ -461,18 +461,20 @@ func HandleGetOtp(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 
-		transactionUpdateFilter := bson.M{"id": id}
-		transactionpdate := bson.M{
-			"$set": bson.M{
-				"status":    "CANCELLED",
-				"date_time": formattedData,
-			},
-		}
+		if len(transaction.OTP) == 0 {
+			transactionUpdateFilter := bson.M{"id": id}
+			transactionpdate := bson.M{
+				"$set": bson.M{
+					"status":    "CANCELLED",
+					"date_time": formattedData,
+				},
+			}
 
-		_, err = transactionCollection.UpdateOne(ctx, transactionUpdateFilter, transactionpdate)
-		if err != nil {
-			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			_, err = transactionCollection.UpdateOne(ctx, transactionUpdateFilter, transactionpdate)
+			if err != nil {
+				logs.Logger.Error(err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
 		}
 	}
 
@@ -487,7 +489,10 @@ func HandleGetOtp(c echo.Context) error {
 			formattedDateTime := FormatDateTime()
 			update := bson.M{
 				"$addToSet": bson.M{"otp": validOtp}, // Add the OTP to the `otp` slice
-				"$set":      bson.M{"date_time": formattedDateTime},
+				"$set": bson.M{
+					"status":    "SUCCESS",
+					"date_time": formattedDateTime,
+				},
 			}
 
 			filter := bson.M{"id": id}

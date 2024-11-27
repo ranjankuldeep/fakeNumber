@@ -69,11 +69,11 @@ func GetOTPServer11(otpURL string, requestID string) ([]string, error) {
 
 func processOTPResponseString(resp OTPServer11ResponseString) ([]string, error) {
 	if resp.ErrorCode == "wait_sms" {
-		return []string{"STATUS_WAIT_CODE"}, nil
+		return []string{}, nil
 	}
 
 	if resp.ErrorCode == "wrong_status" {
-		return []string{"STATUS_CANCEL"}, nil
+		return []string{}, fmt.Errorf("ACCESS_CANCEL")
 	}
 	if resp.SMSCode != "" {
 		return []string{resp.SMSCode}, nil
@@ -87,7 +87,7 @@ func processOTPResponseInt(resp OTPServer11ResponseInt) ([]string, error) {
 	}
 
 	if resp.ErrorCode == "wrong_status" {
-		return []string{}, errors.New("wrong_status")
+		return []string{}, fmt.Errorf("ACCESS_CANCEL")
 	}
 	if resp.SMSCode != "" {
 		return []string{resp.SMSCode}, nil

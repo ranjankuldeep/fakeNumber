@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,22 +18,25 @@ import (
 type TrxRechargeDetails struct {
 	Email        string
 	UserID       string
-	Trx          float64
-	ExchangeRate float64
-	Amount       float64
+	Trx          string
+	ExchangeRate string
+	Amount       string
+	Balance      string
 	Address      string
 	SendTo       string
+	Status       string
 	IP           string
 	Hash         string
 }
 
 // Define input for UPI recharge
 type UpiRechargeDetails struct {
-	Email  string
-	UserID string
-	TrnID  string
-	Amount float64
-	IP     string
+	Email   string
+	UserID  string
+	TrnID   string
+	Balance string
+	Amount  string
+	IP      string
 }
 
 // FetchUser retrieves user details from the database
@@ -56,75 +60,65 @@ func FetchUser(userID string, db *mongo.Database) (*models.ApiWalletUser, error)
 }
 
 // TrxRechargeTeleBot sends TRX recharge details to Telegram bot
-func TrxRechargeTeleBot(db *mongo.Database, details TrxRechargeDetails) (string, error) {
-	user, err := FetchUser(details.UserID, db)
+func TrxRechargeTeleBot(details TrxRechargeDetails) error {
+	result := "Trx Recharge\n\n"
+	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05 PM"))
+	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
+	result += fmt.Sprintf("Trx => %s\n\n", details.Trx) // amount of trx
+	result += fmt.Sprintf("Trx Exchange Rate => %s\n\n", details.ExchangeRate)
+	result += fmt.Sprintf("Total Amount in Inr => %s₹\n\n", details.Amount)
+	result += fmt.Sprintf("Updated Balance => %s\n\n", details.Balance)
+	result += fmt.Sprintf("User Trx address => %s\n\n", details.Address)
+	result += fmt.Sprintf("Send To => %s\n\n", details.SendTo)
+	result += fmt.Sprintf("Send Status => %s\n\n", details.Status)
+	result += fmt.Sprintf("Hash Id => %s\n\n", details.Hash)
+	result += fmt.Sprintf("IP Details => \n%s\n\n", details.IP)
+
+	err := sendRCMessage(result)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch user balance: %v", err)
+		return fmt.Errorf("failed to send message: %v", err)
 	}
+	return nil
+}
 
-	result := fmt.Sprintf(
-		"Trx Recharge\n\n"+
-			"Date => %s\n\n"+
-			"User Email => %s\n\n"+
-			"Trx => %.2f\n\n"+
-			"Trx Exchange Rate => %.2f\n\n"+
-			"Total Amount in Inr => %.2f₹\n\n"+
-			"Updated Balance => %.2f₹\n\n"+
-			"User Trx address => %s\n\n"+
-			"Send To => %s\n\n"+
-			"IP Details => %s\n\n"+
-			"Txn/Hash Id => %s\n\n",
-		time.Now().Format("02-01-2006 03:04:05 PM"),
-		details.Email, details.Trx, details.ExchangeRate, details.Amount, user.Balance, details.Address, details.SendTo, details.IP, details.Hash,
-	)
+func UpiRechargeTeleBot(details UpiRechargeDetails) (string, error) {
+	result := "Upi Recharge\n\n"
+	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05 PM"))
+	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
+	result += fmt.Sprintf("Amount => %s₹\n\n", details.Amount) // Use string Amount directly
+	result += fmt.Sprintf("Updated Balance => %s\n\n", details.Balance)
+	result += fmt.Sprintf("IP Details => %s\n\n", details.IP)
+	result += fmt.Sprintf("Txn Id => \n%s\n\n", details.TrnID)
 
-	encodedResult := url.QueryEscape(result)
-
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot<your-bot-token>/sendMessage?chat_id=<your-chat-id>&text=%s", encodedResult)
-	resp, err := http.Get(apiURL)
+	// Use sendMessage to send the result
+	err := sendRCMessage(result)
 	if err != nil {
 		return "", fmt.Errorf("failed to send message: %v", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP error: status %v", resp.Status)
-	}
-
 	return result, nil
 }
 
-// UpiRechargeTeleBot sends UPI recharge details to Telegram bot
-func UpiRechargeTeleBot(db *mongo.Database, details UpiRechargeDetails) (string, error) {
-	user, err := FetchUser(details.UserID, db)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch user balance: %v", err)
-	}
-
-	result := fmt.Sprintf(
-		"Upi Recharge\n\n"+
-			"Date => %s\n\n"+
-			"User Email => %s\n\n"+
-			"Amount => %.2f₹\n\n"+
-			"Updated Balance => %.2f₹\n\n"+
-			"IP Details => %s\n\n"+
-			"Txn Id => %s\n\n",
-		time.Now().Format("02-01-2006 03:04:05 PM"),
-		details.Email, details.Amount, user.Balance, details.IP, details.TrnID,
+func sendRCMessage(message string) error {
+	encodedMessage := url.QueryEscape(message)
+	apiURL := fmt.Sprintf(
+		"https://api.telegram.org/bot6740130325:AAEp1cTpT2o6qgIR4Mb3T2j4s6VDjSVV5Jo/sendMessage?chat_id=6769991787&text=%s",
+		encodedMessage,
 	)
-
-	encodedResult := url.QueryEscape(result)
-
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot<your-bot-token>/sendMessage?chat_id=<your-chat-id>&text=%s", encodedResult)
 	resp, err := http.Get(apiURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to send message: %v", err)
+		return fmt.Errorf("failed to send message: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP error: status %v", resp.Status)
+		return fmt.Errorf("HTTP error! status: %d in sending message through TeleBot", resp.StatusCode)
 	}
-
-	return result, nil
+	var response numberResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+	if response.Ok == false {
+		return fmt.Errorf("Unable to send Message")
+	}
+	return nil
 }

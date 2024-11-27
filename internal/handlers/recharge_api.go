@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/internal/services"
 	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
@@ -253,8 +254,8 @@ func RechargeTrxApi(c echo.Context) error {
 			"error": "transaction done already",
 		})
 	}
-	defer rechargeResp.Body.Close()
 
+	defer rechargeResp.Body.Close()
 	if rechargeResp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(rechargeResp.Body)
 		log.Printf("ERROR: Failed to save recharge history. Response: %s", string(body))
@@ -265,8 +266,8 @@ func RechargeTrxApi(c echo.Context) error {
 	log.Println("INFO: Recharge history saved successfully for hash:", hash)
 
 	userIdObject, _ := primitive.ObjectIDFromHex(userId)
-	var apiWalletUser models.ApiWalletUser
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
+	var apiWalletUser models.ApiWalletUser
 	err = apiWalletCollection.FindOne(context.TODO(), bson.M{"userId": userIdObject}).Decode(&apiWalletUser)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -297,6 +298,27 @@ func RechargeTrxApi(c echo.Context) error {
 
 	sentUrl := fmt.Sprintf("https://own5k.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
 	newClient := &http.Client{Timeout: 10 * time.Second}
+
+	ipDetails, err := utils.GetIpDetails(c)
+	if err != nil {
+		log.Println("ERROR: Failed to fetch IP details:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to fetch IP details",
+		})
+	}
+	rechargeDetail := services.TrxRechargeDetails{
+		Email:        user.Email,
+		UserID:       userId,
+		Trx:          fmt.Sprintf("%.2f", trxData.TRX),
+		ExchangeRate: exchangeRateStr,
+		Amount:       amount,
+		Balance:      fmt.Sprintf("%.2f", apiWalletUser.Balance),
+		Address:      fromAddress,
+		SendTo:       toAddress,
+		Status:       "",
+		Hash:         hash,
+		IP:           ipDetails,
+	}
 
 	// Make the GET request
 	response, err := newClient.Get(sentUrl)
@@ -333,14 +355,22 @@ func RechargeTrxApi(c echo.Context) error {
 				"error": "",
 			})
 		}
-	}
-
-	ipDetails, err := utils.GetIpDetails(c)
-	if err != nil {
-		log.Println("ERROR: Failed to fetch IP details:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to fetch IP details",
+		rechargeDetail.Status = "fail"
+		err = services.TrxRechargeTeleBot(rechargeDetail)
+		if err != nil {
+			logs.Logger.Error(err)
+			logs.Logger.Info("recharget trx send failed")
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
+			"ipDetails": ipDetails,
 		})
+	}
+	rechargeDetail.Status = "ok"
+	err = services.TrxRechargeTeleBot(rechargeDetail)
+	if err != nil {
+		logs.Logger.Error(err)
+		logs.Logger.Info("recharget trx send failed")
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),

@@ -78,20 +78,17 @@ func main() {
 	// Run periodically token update of server9
 	go func() {
 		for {
-			log.Println("Running server token update task...")
 			err := lib.UpdateServerToken(db)
 			if err != nil {
 				log.Printf("Error during token update: %v", err)
 			}
 			log.Println("Server token update task completed.")
-			time.Sleep(2 * time.Hour) // Wait for 2 hours before running again
+			time.Sleep(2 * time.Hour)
 		}
 	}()
 
-	// Middleware to set the DB in the context
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Set DB in the context for every request
 			c.Set("db", db)
 			return next(c)
 		}
@@ -108,17 +105,16 @@ func main() {
 	routes.RegisterServerDiscountRoutes(e)
 	routes.RegisterApisRoutes(e)
 
-	// update the server data
 	err = UpdateServerData(db, context.TODO())
 	if err != nil {
 		logs.Logger.Error(err)
 	}
 	go MonitorOrders(db)
-	go func() {
-		for {
-			CheckAndBlockUsers(db)
-			time.Sleep(2 * time.Second)
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		CheckAndBlockUsers(db)
+	// 		time.Sleep(2 * time.Second)
+	// 	}
+	// }()
 	e.Logger.Fatal(e.Start(":8000"))
 }

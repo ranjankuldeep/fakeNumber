@@ -225,6 +225,26 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if numData.Id == "" || numData.Number == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 	}
+	ipDetails, err := utils.GetIpDetails(c)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	numberDetails := services.NumberDetails{
+		Email:       user.Email,
+		ServiceName: serviceName,
+		ServiceCode: serverData.Code,
+		Price:       fmt.Sprintf("%.2f", price),
+		Server:      server,
+		Balance:     fmt.Sprintf("%.2f", roundedBalance),
+		Number:      numData.Number,
+		Ip:          ipDetails,
+	}
+	err = services.NumberGetDetails(numberDetails)
+	if err != nil {
+		logs.Logger.Error(err)
+		logs.Logger.Info("Number details send failed")
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "id": numData.Id, "number": numData.Number})
 }
 
@@ -395,7 +415,7 @@ func round(val float64, precision int) float64 {
 }
 
 func FormatDateTime() string {
-	return time.Now().Format("01/02/2006T03:04:05 PM")
+	return time.Now().Format("2006-01-02T15:04:05")
 }
 
 func removeHTMLTags(input string) string {
@@ -420,6 +440,7 @@ func HandleGetOtp(c echo.Context) error {
 	if server == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
 	}
+	serverNumber, _ := strconv.Atoi(server)
 
 	var apiWalletUser models.ApiWalletUser
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
@@ -427,6 +448,36 @@ func HandleGetOtp(c echo.Context) error {
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
+	}
+
+	var transaction models.TransactionHistory
+	transactionCollection := models.InitializeTransactionHistoryCollection(db)
+	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	var serverList models.ServerList
+	serverListollection := models.InitializeServerListCollection(db)
+	err = serverListollection.FindOne(ctx, bson.M{
+		"name":           serviceName,
+		"servers.server": serverNumber,
+	}).Decode(&serverList)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	var serverDataInfo models.ServerData
+	for _, s := range serverList.Servers {
+		if s.Server == serverNumber {
+			serverDataInfo = models.ServerData{
+				Price:  s.Price,
+				Code:   s.Code,
+				Otp:    s.Otp,
+				Server: serverNumber,
+			}
+		}
 	}
 
 	var userData models.User
@@ -506,20 +557,21 @@ func HandleGetOtp(c echo.Context) error {
 				logs.Logger.Error(err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			}
-			formattedIpDetails := removeHTMLTags(ipDetails)
 			otpDetail := services.OTPDetails{
 				Email:       userData.Email,
-				ServiceName: existingEntry.Service,
-				Price:       existingEntry.Price,
-				Server:      existingEntry.Server,
-				Number:      existingEntry.Number,
+				ServiceName: transaction.Service,
+				ServiceCode: serverDataInfo.Code,
+				Price:       transaction.Price,
+				Server:      transaction.Server,
+				Number:      transaction.Number,
 				OTP:         validOtp,
-				Ip:          formattedIpDetails,
+				Ip:          ipDetails,
 			}
 
 			err = services.OtpGetDetails(otpDetail)
 			if err != nil {
 				logs.Logger.Error(err)
+				logs.Logger.Error("Unable to send message")
 			}
 
 			go func(otp string) {
@@ -806,6 +858,7 @@ func HandleNumberCancel(c echo.Context) error {
 	if server == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
 	}
+	serverNumber, _ := strconv.Atoi(server)
 
 	db := c.Get("db").(*mongo.Database)
 	var existingOrder models.Order
@@ -813,6 +866,28 @@ func HandleNumberCancel(c echo.Context) error {
 	err := orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "number already cancelled"})
+	}
+
+	var serverList models.ServerList
+	serverListollection := models.InitializeServerListCollection(db)
+	err = serverListollection.FindOne(ctx, bson.M{
+		"name":           existingOrder.Service,
+		"servers.server": serverNumber,
+	}).Decode(&serverList)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	var serverDataInfo models.ServerData
+	for _, s := range serverList.Servers {
+		if s.Server == serverNumber {
+			serverDataInfo = models.ServerData{
+				Price:  s.Price,
+				Code:   s.Code,
+				Otp:    s.Otp,
+				Server: serverNumber,
+			}
+		}
 	}
 
 	var apiWalletUser models.ApiWalletUser
@@ -929,7 +1004,23 @@ func HandleNumberCancel(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
 	}
-	services.NumberCancelDetails(user.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
+	cancelDetail := services.CancelDetails{
+		Email:       user.Email,
+		ServiceName: transaction.Service,
+		ServiceCode: serverDataInfo.Code,
+		Price:       transaction.Price,
+		Server:      transaction.Server,
+		Balance:     fmt.Sprintf("%.2f", newBalance),
+		Number:      transaction.Number,
+		IP:          ipDetails,
+	}
+
+	err = services.NumberCancelDetails(cancelDetail)
+	if err != nil {
+		logs.Logger.Error(err)
+		logs.Logger.Error("Unable to send message")
+	}
+	services.NumberCancelDetails(cancelDetail)
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }
 

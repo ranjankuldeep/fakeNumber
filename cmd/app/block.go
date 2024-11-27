@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
-	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -123,7 +122,6 @@ func CheckAndBlockUsers(db *mongo.Database) {
 
 	for _, user := range users {
 		if user.Blocked == true {
-			log.Printf("Skipping user %s as they are already blocked", user.ID.Hex())
 			continue
 		}
 
@@ -158,10 +156,10 @@ func CheckAndBlockUsers(db *mongo.Database) {
 			divider = 1
 		}
 		balanceDifference := (walletBalance - adjustedTotal) / divider * 100
-		logs.Logger.Infof("balnce differnce %f for user %v", balanceDifference, user.ID.String())
+		// logs.Logger.Infof("balnce differnce %f for user %v", balanceDifference, user.ID.String())
 
 		// Block user if difference exceeds ±0.1%
-		if balanceDifference < -0.1 || balanceDifference > 0.1 {
+		if balanceDifference < -0.2 || balanceDifference > 0.2 {
 			update := bson.M{
 				"$set": bson.M{
 					"blocked": true,

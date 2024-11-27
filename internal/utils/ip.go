@@ -9,7 +9,7 @@ import (
 )
 
 func GetIpDetails(c echo.Context) (string, error) {
-	apiURL := fmt.Sprintf("https://own5k.in/p/ip.php ")
+	apiURL := fmt.Sprintf("https://own5k.in/p/ip.php")
 	resp, err := http.Get(apiURL)
 	if err != nil {
 		return "", err

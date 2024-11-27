@@ -483,10 +483,10 @@ func CancelNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	ipDetails, err := utils.GetIpDetails(c)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	}
-	services.NumberCancelDetails(userData.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
+	// ipDetails, err := utils.GetIpDetails(c)
+	// if err != nil {
+	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	// }
+	// services.NumberCancelDetails(userData.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }

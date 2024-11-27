@@ -242,7 +242,7 @@ func TransactionCount(c echo.Context) error {
 		transactionsById[transaction.ID.String()] = append(transactionsById[transaction.ID.String()], transaction)
 	}
 
-	successCount := 0   // FINISHED
+	successCount := 0   // SUCCESS
 	cancelledCount := 0 // CANCELLED
 	pendingCount := 0   // PENDING
 
@@ -251,7 +251,7 @@ func TransactionCount(c echo.Context) error {
 		hasCancelled := false
 		hasOtp := false
 		for _, txn := range transactions {
-			if txn.Status == "FINISHED" {
+			if txn.Status == "SUCCESS" {
 				hasFinished = true
 			}
 			if txn.Status == "CANCELLED" {

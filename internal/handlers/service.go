@@ -199,9 +199,9 @@ func HandleGetNumberRequest(c echo.Context) error {
 	var expirationTime time.Time
 	switch server {
 	case "1", "2", "3", "4", "5", "6", "8", "9", "10", "11":
-		expirationTime = time.Now().Add(130 * time.Second)
+		expirationTime = time.Now().Add(19 * time.Minute)
 	case "7":
-		expirationTime = time.Now().Add(130 * time.Second)
+		expirationTime = time.Now().Add(9 * time.Minute)
 	}
 
 	orderCollection := models.InitializeOrderCollection(db)

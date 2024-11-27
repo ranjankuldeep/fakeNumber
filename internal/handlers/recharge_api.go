@@ -18,6 +18,7 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -49,12 +50,10 @@ type IpDetails struct {
 func RechargeUpiApi(c echo.Context) error {
 	ctx := context.Background()
 
-	// Get query parameters
 	transactionId := c.QueryParam("transactionId")
 	userId := c.QueryParam("userId")
 	email := c.QueryParam("email")
 
-	// Validate input parameters
 	if userId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_USER_ID"})
 	}
@@ -157,11 +156,14 @@ func RechargeUpiApi(c echo.Context) error {
 	})
 }
 
+type ResponseStructure struct {
+	Result bool `json:"result"`
+}
+
 // RechargeTrxApi handles TRX recharge transactions.
 func RechargeTrxApi(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
 	log.Println("INFO: RechargeTrxApi endpoint invoked")
-
-	// ctx := context.Background()
 
 	// Get query parameters
 	address := c.QueryParam("address")
@@ -169,6 +171,7 @@ func RechargeTrxApi(c echo.Context) error {
 	userId := c.QueryParam("userId")
 	exchangeRateStr := c.QueryParam("exchangeRate")
 	email := c.QueryParam("email")
+	logs.Logger.Info(hash, exchangeRateStr)
 
 	// Validate input parameters
 	if address == "" || hash == "" || userId == "" || exchangeRateStr == "" || email == "" {
@@ -186,29 +189,12 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 
-	// Get MongoDB database instance
-	// db := c.Get("db").(*mongo.Database)
-
-	// Commenting out the recharge maintenance check
-	/*
-		var rechargeData models.RechargeAPI
-		rechargeCollection := models.InitializeRechargeAPICollection(db)
-		if err := rechargeCollection.FindOne(ctx, bson.M{"recharge_type": "trx"}).Decode(&rechargeData); err != nil {
-			log.Println("ERROR: Failed to fetch recharge data:", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": "Internal server error",
-			})
-		}
-		if rechargeData.Maintenance {
-			return c.JSON(http.StatusForbidden, map[string]string{
-				"error": "TRX recharge is under maintenance",
-			})
-		}
-	*/
-
 	// Fetch transaction data
 	trxApiURL := fmt.Sprintf("https://own5k.in/tron/?type=txnid&address=%s&hash=%s", address, hash)
-	resp, err := http.Get(trxApiURL)
+	req, _ := http.NewRequest("GET", trxApiURL, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Println("ERROR: Failed to fetch TRX transaction data:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -216,7 +202,6 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		log.Println("ERROR: TRX transaction API returned non-200 status code:", resp.StatusCode)
 		return c.JSON(http.StatusBadRequest, map[string]string{
@@ -224,10 +209,11 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 
-	// Parse TRX transaction response
 	var trxData struct {
-		TRX float64 `json:"trx"`
+		TRX     float64 `json:"trx"`
+		SUCCESS bool    `json:"success"`
 	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&trxData); err != nil {
 		log.Println("ERROR: Failed to decode TRX transaction response:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -235,21 +221,24 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 
-	// Check transaction amount
+	if trxData.SUCCESS == false {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "TRX ADDRESS NOT FOUND",
+		})
+	}
+
 	if trxData.TRX <= 0 {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Invalid TRX transaction",
 		})
 	}
 
-	// Calculate amount in INR
 	price := trxData.TRX * exchangeRate
-
-	// Save recharge history
+	amount := strconv.FormatFloat(price, 'f', 2, 64)
 	rechargeHistoryPayload := map[string]interface{}{
 		"userId":         userId,
 		"transaction_id": hash,
-		"amount":         fmt.Sprintf("%.2f", price),
+		"amount":         amount,
 		"payment_type":   "trx",
 		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
 		"status":         "Received",
@@ -259,9 +248,9 @@ func RechargeTrxApi(c echo.Context) error {
 	rechargeHistoryURL := fmt.Sprintf("%sapi/save-recharge-history", os.Getenv("BASE_API_URL"))
 	rechargeResp, err := http.Post(rechargeHistoryURL, "application/json", bytes.NewReader(payloadBytes))
 	if err != nil {
-		log.Println("ERROR: Failed to save recharge history:", err)
+		log.Println("ERROR: Already Done Tranasaction:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to save recharge history",
+			"error": "transaction done already",
 		})
 	}
 	defer rechargeResp.Body.Close()
@@ -270,14 +259,84 @@ func RechargeTrxApi(c echo.Context) error {
 		body, _ := ioutil.ReadAll(rechargeResp.Body)
 		log.Printf("ERROR: Failed to save recharge history. Response: %s", string(body))
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to save recharge history",
+			"error": "Transaction Already Done",
+		})
+	}
+	log.Println("INFO: Recharge history saved successfully for hash:", hash)
+
+	// after recharge save, send the transaction
+
+	userIdObject, _ := primitive.ObjectIDFromHex(userId)
+	var apiWalletUser models.ApiWalletUser
+	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
+	err = apiWalletCollection.FindOne(context.TODO(), bson.M{"userId": userIdObject}).Decode(&apiWalletUser)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "",
+		})
+	}
+	var adminWallet models.RechargeAPI
+	rechargeWalletCollection := models.InitializeRechargeAPICollection(db)
+	err = rechargeWalletCollection.FindOne(context.TODO(), bson.M{"recharge_type": "trx"}).Decode(&adminWallet)
+	if err != nil {
+		logs.Logger.Error(err)
+	}
+	toAddress := adminWallet.APIKey
+	fromAddress := apiWalletUser.TRXAddress
+	privateKey := apiWalletUser.TRXPrivateKey
+
+	sentUrl := fmt.Sprintf("https://own5k.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
+	newClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Make the GET request
+	response, err := newClient.Get(sentUrl)
+	if err != nil {
+		log.Println("Failed to call URL:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "",
+		})
+	}
+	defer resp.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		log.Println("Received non-200 status code:", resp.StatusCode)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "",
+		})
+	}
+	var user models.User
+	userCollection := models.InitializeUserCollection(db)
+	err = userCollection.FindOne(context.TODO(), bson.M{"_id": userIdObject}).Decode(&user)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "",
 		})
 	}
 
-	// Log recharge success
-	log.Println("INFO: Recharge history saved successfully for hash:", hash)
+	unsendTrxColl := models.InitializeUnsendTrxCollection(db)
+	var responseData ResponseStructure
 
-	// Fetch IP details
+	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
+		log.Println("Failed to unmarshal response:", err)
+
+		unsendTrx := models.UnsendTrx{
+			Email:         user.Email,
+			TrxAddress:    apiWalletUser.TRXAddress,
+			TrxPrivateKey: apiWalletUser.TRXPrivateKey,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+		}
+
+		_, insertErr := unsendTrxColl.InsertOne(context.TODO(), unsendTrx)
+		if insertErr != nil {
+			log.Println("Failed to insert unsend transaction:", insertErr)
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "",
+			})
+		}
+	}
+
 	ipDetails, err := utils.GetIpDetails(c)
 	if err != nil {
 		log.Println("ERROR: Failed to fetch IP details:", err)
@@ -285,24 +344,16 @@ func RechargeTrxApi(c echo.Context) error {
 			"error": "Failed to fetch IP details",
 		})
 	}
-
-	// Respond to client
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
 		"ipDetails": ipDetails,
 	})
 }
 
-// ExchangeRate handles exchange rate queries.
-
-// ExchangeRate fetches the exchange rate and returns it as-is
 func ExchangeRate(c echo.Context) error {
 	log.Println("INFO: ExchangeRate endpoint invoked")
+	apiURL := "https://own5k.in/p/trxprice.php"
 
-	// URL for the external API providing exchange rates
-	apiURL := "https://own5k.in/p/trxprice.php" // Replace with the actual API URL
-
-	// Make an HTTP GET request to the external API
 	resp, err := http.Get(apiURL)
 	if err != nil {
 		log.Printf("ERROR: Failed to fetch exchange rate: %v", err)
@@ -312,15 +363,12 @@ func ExchangeRate(c echo.Context) error {
 	}
 	defer resp.Body.Close()
 
-	// Check for non-200 status codes
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("ERROR: Received non-200 status code: %d", resp.StatusCode)
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve exchange rate",
 		})
 	}
-
-	// Stream the response body directly to the client
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("ERROR: Failed to read response body: %v", err)
@@ -328,16 +376,11 @@ func ExchangeRate(c echo.Context) error {
 			"error": "Failed to process exchange rate",
 		})
 	}
-
 	return c.Blob(http.StatusOK, "application/json", body)
 }
 
-// ToggleMaintenance handles toggling maintenance mode.
 func ToggleMaintenance(c echo.Context) error {
-	// Log the start of the function
 	log.Println("INFO: Starting ToggleMaintenance handler")
-
-	// Retrieve the database instance from the context
 	db, ok := c.Get("db").(*mongo.Database)
 	if !ok {
 		log.Println("ERROR: Failed to retrieve database instance from context")
@@ -345,13 +388,11 @@ func ToggleMaintenance(c echo.Context) error {
 	}
 	log.Println("INFO: Database instance retrieved successfully")
 
-	// Define a struct for the input
 	type RequestBody struct {
 		RechargeType string `json:"rechargeType"`
 		Status       bool   `json:"status"`
 	}
 
-	// Parse the input JSON
 	var input RequestBody
 	log.Println("INFO: Parsing input JSON")
 	if err := c.Bind(&input); err != nil {
@@ -359,7 +400,6 @@ func ToggleMaintenance(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
 	}
 
-	// Log the received input
 	log.Printf("INFO: Received input - RechargeType: %s, Status: %t\n", input.RechargeType, input.Status)
 
 	// Validate the input

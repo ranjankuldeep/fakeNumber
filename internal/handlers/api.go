@@ -102,7 +102,7 @@ func GetNumberHandlerApi(c echo.Context) error {
 	numData, err := ExtractNumber(server, apiURLRequest)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
 	logs.Logger.Info(fmt.Sprintf("id-%s number-%s", numData.Id, numData.Number))
@@ -143,6 +143,14 @@ func GetNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
+	var expirationTime time.Time
+	switch server {
+	case "1", "2", "3", "4", "5", "6", "8", "9", "10", "11":
+		expirationTime = time.Now().Add(19 * time.Minute)
+	case "7":
+		expirationTime = time.Now().Add(9 * time.Minute)
+	}
+
 	orderCollection := models.InitializeOrderCollection(db)
 	order := models.Order{
 		ID:             primitive.NewObjectID(),
@@ -153,7 +161,7 @@ func GetNumberHandlerApi(c echo.Context) error {
 		NumberID:       numData.Id,
 		Number:         numData.Number,
 		OrderTime:      time.Now(),
-		ExpirationTime: time.Now().Add(20 * time.Minute),
+		ExpirationTime: expirationTime,
 	}
 	_, err = orderCollection.InsertOne(ctx, order)
 	if err != nil {
@@ -252,12 +260,10 @@ func GetOTPHandlerApi(c echo.Context) error {
 	if transaction.Status == "CANCELLED" {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok", "otp": "number cancelled"})
 	}
-	if len(transaction.OTP) == 0 {
+	if len(transaction.OTP) == 0 && transaction.Status == "PENDING" {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok", "otp": "waiting for otp"})
 	}
-	if transaction.Status == "PENDING" {
-		c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": transaction.OTP})
-	}
+
 	var apiWalletUser models.ApiWalletUser
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
 	err = apiWalletCollection.FindOne(context.TODO(), bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
@@ -343,7 +349,7 @@ func GetOTPHandlerApi(c echo.Context) error {
 			}(validOtp)
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": "waiting for otp"})
+	return c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": transaction.OTP})
 }
 
 func CancelNumberHandlerApi(c echo.Context) error {
@@ -417,7 +423,6 @@ func CancelNumberHandlerApi(c echo.Context) error {
 	otpArrived := false
 	if len(transactionData.OTP) != 0 {
 		otpArrived = true
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "TRANSACTION_HISTORY_NOT_FOUND"})
 	}
 	if otpArrived == true {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "otp already come"})

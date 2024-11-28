@@ -3,18 +3,14 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -121,26 +117,27 @@ func ChangeAPIKeyHandler(c echo.Context) error {
 
 // Handler to update UPI QR code
 func UpiQRUpdateHandler(c echo.Context) error {
-	file := c.FormValue("file")
-	if file == "" {
-		return c.String(http.StatusBadRequest, "QR code file is required")
-	}
+	// file := c.FormValue("file")
+	// if file == "" {
+	// 	return c.String(http.StatusBadRequest, "QR code file is required")
+	// }
 
-	base64Data := file[strings.IndexByte(file, ',')+1:]
-	bufferData, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid file format"})
-	}
+	// base64Data := file[strings.IndexByte(file, ',')+1:]
+	// bufferData, err := base64.StdEncoding.DecodeString(base64Data)
+	// if err != nil {
+	// 	return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid file format"})
+	// }
 
-	filePath := filepath.Join("uploads", "upi-qr-code.png")
-	os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
+	// filePath := filepath.Join("uploads", "upi-qr-code.png")
+	// os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
 
-	err = ioutil.WriteFile(filePath, bufferData, 0644)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to save QR code"})
-	}
+	// err = ioutil.WriteFile(filePath, bufferData, 0644)
+	// if err != nil {
+	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to save QR code"})
+	// }
 
-	return c.String(http.StatusOK, "QR code updated successfully")
+	// return c.String(http.StatusOK, "QR code updated successfully")
+	return nil
 }
 
 // Handler to create or update API key for recharge type
@@ -221,57 +218,30 @@ func CreateOrUpdateAPIKeyHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"message": "API key updated successfully"})
 }
 
-// Handler to retrieve the UPI QR code
-// Handler to retrieve the UPI QR code
-// Handler to retrieve the UPI QR code
 func GetUpiQR(c echo.Context) error {
-	// Logger: Start of the function
-	fmt.Println("INFO: GetUpiQR handler invoked")
-
-	// db := c.Get("db").(*mongo.Database)
-	// serverCol := db.Collection("servers") // Ensure this matches your actual MongoDB collection name
-
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancel()
-
-	/*
-		// Logger: Checking for maintenance mode
-		fmt.Println("INFO: Checking server maintenance status")
-		var serverData struct {
-			Maintenance bool `bson:"maintainance"`
-		}
-		err := serverCol.FindOne(ctx, bson.M{"server": 0}).Decode(&serverData)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				// Logger: No server data found
-				fmt.Println("ERROR: Server data not found in the database")
-				return c.JSON(http.StatusNotFound, echo.Map{"error": "Server data not found"})
-			}
-			// Logger: Error decoding server data
-			fmt.Println("ERROR: Error decoding server data", err)
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
-		}
-
-		if serverData.Maintenance {
-			// Logger: Site is under maintenance
-			fmt.Println("INFO: Site is under maintenance")
-			return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
-		}
-	*/
-
-	// Logger: Checking if QR code file exists
-	fmt.Println("INFO: Checking if QR code file exists")
-	filePath := filepath.Join("./uploads", "upi-qr-code.png")
-
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		// Logger: QR code file not found
-		fmt.Println("ERROR: QR code file not found")
-		return c.JSON(http.StatusNotFound, echo.Map{"error": "QR code file not found"})
+	amount := c.QueryParam("amt")
+	if amount == "" {
+		logs.Logger.Info(amount)
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty amount"})
+	}
+	db, ok := c.Get("db").(*mongo.Database)
+	if !ok {
+		log.Println("ERROR: Failed to retrieve database instance from context")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 
-	// Logger: Sending QR code file as a response
-	fmt.Println("INFO: Sending QR code file")
-	return c.File(filePath)
+	var admintData models.RechargeAPI
+	adminWalletCollection := models.InitializeRechargeAPICollection(db)
+	err := adminWalletCollection.FindOne(context.TODO(), bson.M{"recharge_type": "upi"}).Decode(&admintData)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": ""})
+	}
+	upiId := admintData.APIKey
+	qrUrl := fmt.Sprintf("https://own5k.in/qr/?upi=%s&amount=%s", upiId, amount)
+	return c.JSON(http.StatusOK, echo.Map{
+		"url": qrUrl,
+	})
 }
 
 // UpdateBalanceHandler handles balance updates for a user

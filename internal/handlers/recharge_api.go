@@ -106,7 +106,7 @@ func RechargeUpiApi(c echo.Context) error {
 		"transaction_id": transactionId,
 		"amount":         upiData.Amount,
 		"payment_type":   "upi",
-		"date_time":      upiData.Date,
+		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
 		"status":         "Received",
 	}
 	rechargePayloadBytes, _ := json.Marshal(rechargePayload)

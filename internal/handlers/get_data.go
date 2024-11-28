@@ -2,6 +2,10 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"sort"
@@ -19,7 +23,21 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Handler to retrieve servers data by service name
+type BalanceRequest struct {
+	Url     string
+	Headers map[string]string
+}
+
+type ServerCred struct {
+	Token  string
+	ApiKey string
+}
+
+type Balance struct {
+	Value  float64
+	Symbol string
+}
+
 func GetServersData(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverListCol := models.InitializeServerListCollection(db)
@@ -585,4 +603,195 @@ func GetTotalUserCount(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{"totalUserCount": userCount})
+}
+
+func GetServerBalanceHandler(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	server := c.QueryParam("server")
+
+	balance, err := GetServerBalance(db, server)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error fetching server balance"})
+	}
+	return c.JSON(http.StatusOK, echo.Map{"balance": balance.Value, "symbol": balance.Symbol})
+}
+
+func GetServerBalance(db *mongo.Database, server string) (Balance, error) {
+	serverNumber, _ := strconv.Atoi(server)
+	var serverInfo models.Server
+	serverCollection := models.InitializeServerCollection(db)
+	err := serverCollection.FindOne(context.TODO(), bson.M{"server": serverNumber}).Decode(&server)
+	if err != nil {
+		logs.Logger.Error(err)
+		return Balance{}, err
+	}
+
+	cred := ServerCred{
+		Token:  serverInfo.Token,
+		ApiKey: serverInfo.APIKey,
+	}
+
+	balanceFetchUrl, err := ConstructBalanceUrl(server, cred)
+	if err != nil {
+		logs.Logger.Error(err)
+		return Balance{}, err
+	}
+	balance, err := FetchBalance(server, balanceFetchUrl.Url, balanceFetchUrl.Headers)
+	if err != nil {
+		return Balance{}, err
+	}
+	return balance, nil
+}
+
+func ConstructBalanceUrl(server string, serverCred ServerCred) (BalanceRequest, error) {
+	switch server {
+	case "1":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "2":
+		return BalanceRequest{
+			Url: fmt.Sprintf("https://5sim.net/v1/user/profile"),
+			Headers: map[string]string{
+				"Authorization": fmt.Sprintf("Bearer %s", serverCred.Token),
+				"Accept":        "application/json",
+			},
+		}, nil
+	case "3":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://smshub.org/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "4":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://api.tiger-sms.com/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "5":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://api.grizzlysms.com/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "6":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://tempnum.org/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "7":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://smsbower.online/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "8":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://api.sms-activate.guru/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "9":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://own5k.in/p/ccpay.php?type=balance"),
+			Headers: map[string]string{},
+		}, nil
+	case "10":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://sms-activation-service.pro/stubs/handler_api?api_key=%s&action=getBalance", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	case "11":
+		return BalanceRequest{
+			Url:     fmt.Sprintf("https://api.sms-man.com/control/get-balance?token=%s", serverCred.ApiKey),
+			Headers: map[string]string{},
+		}, nil
+	}
+	return BalanceRequest{}, nil
+}
+
+func FetchBalance(server string, apiURL string, headers map[string]string) (Balance, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return Balance{}, fmt.Errorf("failed to create balance request: %w", err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Balance{}, fmt.Errorf("failed to fetch API: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return Balance{}, fmt.Errorf("failed to read response body: %w", err)
+	}
+	responseData := string(body)
+	logs.Logger.Info(responseData)
+	if strings.TrimSpace(responseData) == "" {
+		return Balance{}, errors.New("RECEIVED_EMPTY_RESPONSE_FROM_THIRD_PARTY_SERVER")
+	}
+
+	switch server {
+	case "1":
+		balance := strings.TrimPrefix(responseData, "ACCESS_BALANCE:")
+		value, err := strconv.ParseFloat(balance, 64)
+		if err != nil {
+			return Balance{}, fmt.Errorf("failed to parse balance: %w", err)
+		}
+		return Balance{Value: value, Symbol: "p"}, nil
+
+	case "2":
+		var responseDataJSON struct {
+			Balance float64 `json:"balance"`
+		}
+		err = json.Unmarshal(body, &responseDataJSON)
+		if err != nil {
+			return Balance{}, fmt.Errorf("failed to parse JSON response for balance: %w", err)
+		}
+		return Balance{Value: responseDataJSON.Balance, Symbol: "p"}, nil
+
+	case "3":
+		balance := strings.TrimPrefix(responseData, "ACCESS_BALANCE:")
+		value, err := strconv.ParseFloat(balance, 64)
+		if err != nil {
+			return Balance{}, fmt.Errorf("failed to parse balance: %w", err)
+		}
+		return Balance{Value: value, Symbol: "$"}, nil
+
+	case "4", "5", "6", "7", "8":
+		balance := strings.TrimPrefix(responseData, "ACCESS_BALANCE:")
+		value, err := strconv.ParseFloat(balance, 64)
+		if err != nil {
+			return Balance{}, fmt.Errorf("failed to parse balance: %w", err)
+		}
+		return Balance{Value: value, Symbol: "p"}, nil
+
+	case "9":
+		value, err := strconv.ParseFloat(responseData, 64)
+		if err != nil {
+			return Balance{}, fmt.Errorf("failed to parse balance: %w", err)
+		}
+		return Balance{Value: value, Symbol: "p"}, nil
+
+	case "10":
+		value, err := strconv.ParseFloat(responseData, 64)
+		if err != nil {
+			return Balance{}, fmt.Errorf("failed to parse balance: %w", err)
+		}
+		return Balance{Value: value, Symbol: "$"}, nil
+
+	case "11":
+		var responseDataJSON struct {
+			Balance float64 `json:"balance"`
+		}
+		err = json.Unmarshal(body, &responseDataJSON)
+		if err != nil {
+			return Balance{}, fmt.Errorf("failed to parse JSON response: %w", err)
+		}
+		return Balance{Value: responseDataJSON.Balance, Symbol: "p"}, nil
+
+	default:
+		return Balance{}, errors.New("INVALID_SERVER_VALUE")
+	}
 }

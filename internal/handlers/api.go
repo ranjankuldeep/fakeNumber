@@ -318,7 +318,7 @@ func GetOTPHandlerApi(c echo.Context) error {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			}
 
-			ipDetails, err := utils.GetIpDetails(c)
+			ipDetails, err := utils.GetIpDetails()
 			if err != nil {
 				logs.Logger.Error(err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

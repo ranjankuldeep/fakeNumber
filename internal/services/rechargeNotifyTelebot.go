@@ -39,6 +39,14 @@ type UpiRechargeDetails struct {
 	IP      string
 }
 
+type AdminRechargeDetails struct {
+	Email          string
+	UserID         string
+	UpdatedBalance string
+	Amount         string
+	IP             string
+}
+
 // FetchUser retrieves user details from the database
 func FetchUser(userID string, db *mongo.Database) (*models.ApiWalletUser, error) {
 	apiWalletUserCollection := db.Collection("apiWalletUsers") // Update the collection name as needed

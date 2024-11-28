@@ -225,7 +225,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if numData.Id == "" || numData.Number == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 	}
-	ipDetails, err := utils.GetIpDetails(c)
+	ipDetails, err := utils.GetIpDetails()
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -552,7 +552,7 @@ func HandleGetOtp(c echo.Context) error {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			}
 
-			ipDetails, err := utils.GetIpDetails(c)
+			ipDetails, err := utils.GetIpDetails()
 			if err != nil {
 				logs.Logger.Error(err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1000,7 +1000,7 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	ipDetails, err := utils.GetIpDetails(c)
+	ipDetails, err := utils.GetIpDetails()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
 	}

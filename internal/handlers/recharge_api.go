@@ -144,7 +144,7 @@ func RechargeUpiApi(c echo.Context) error {
 	log.Println("[INFO] Recharge history saved successfully")
 
 	// Fetch IP details
-	ipDetails, err := utils.GetIpDetails(c)
+	ipDetails, err := utils.GetIpDetails()
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -299,7 +299,7 @@ func RechargeTrxApi(c echo.Context) error {
 	sentUrl := fmt.Sprintf("https://own5k.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
 	newClient := &http.Client{Timeout: 10 * time.Second}
 
-	ipDetails, err := utils.GetIpDetails(c)
+	ipDetails, err := utils.GetIpDetails()
 	if err != nil {
 		log.Println("ERROR: Failed to fetch IP details:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{

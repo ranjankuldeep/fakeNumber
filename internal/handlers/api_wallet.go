@@ -247,7 +247,7 @@ func GetUpiQR(c echo.Context) error {
 // UpdateBalanceHandler handles balance updates for a user
 func UpdateBalanceHandler(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	walletCol := db.Collection("api_wallet_users")
+	walletCol := models.InitializeApiWalletuserCollection(db)
 
 	// Parse request body
 	var requestBody struct {
@@ -255,13 +255,15 @@ func UpdateBalanceHandler(c echo.Context) error {
 		NewBalance float64 `json:"new_balance"`
 	}
 	if err := c.Bind(&requestBody); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid request body"})
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Invalid request body"})
 	}
 
 	// Validate input
 	if requestBody.UserID == "" || requestBody.NewBalance == 0 {
-		return c.JSON(http.StatusBadRequest, echo.Map{"message": "User ID and new_balance are required"})
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "User ID and new_balance are required"})
 	}
+	userObjectID, _ := primitive.ObjectIDFromHex(requestBody.UserID)
 
 	// Create a MongoDB context with a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -271,10 +273,10 @@ func UpdateBalanceHandler(c echo.Context) error {
 	var user struct {
 		Balance float64 `bson:"balance"`
 	}
-	err := walletCol.FindOne(ctx, bson.M{"userId": requestBody.UserID}).Decode(&user)
+	err := walletCol.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return c.JSON(http.StatusNotFound, echo.Map{"message": "User not found"})
+			return c.JSON(http.StatusInternalServerError, echo.Map{"message": "User not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch user"})
 	}
@@ -318,6 +320,7 @@ func UpdateBalanceHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update balance"})
 	}
 
+	// send the telebot message then
 	return c.JSON(http.StatusOK, echo.Map{
 		"message": "Balance updated successfully",
 		"balance": requestBody.NewBalance,

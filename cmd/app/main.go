@@ -16,7 +16,6 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
-	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 func Load(envFile string) {
@@ -105,10 +104,7 @@ func main() {
 	routes.RegisterServerDiscountRoutes(e)
 	routes.RegisterApisRoutes(e)
 
-	err = UpdateServerData(db, context.TODO())
-	if err != nil {
-		logs.Logger.Error(err)
-	}
+	go UpdateServerData(db, context.TODO())
 	go MonitorOrders(db)
 	// go func() {
 	// 	for {

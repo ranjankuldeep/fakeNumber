@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-
-	"github.com/labstack/echo/v4"
 )
 
-func GetIpDetails(c echo.Context) (string, error) {
+func GetIpDetails() (string, error) {
 	apiURL := fmt.Sprintf("https://own5k.in/p/ip.php")
 	resp, err := http.Get(apiURL)
 	if err != nil {

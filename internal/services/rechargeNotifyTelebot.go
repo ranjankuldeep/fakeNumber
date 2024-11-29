@@ -112,8 +112,8 @@ func AdminRechargeTeleBot(details AdminRechargeDetails) error {
 	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
 	result += fmt.Sprintf("Amount => %s₹\n\n", details.Amount) // Use string Amount directly
 	result += fmt.Sprintf("Updated Balance => %s\n\n", details.UpdatedBalance)
-	result += fmt.Sprintf("IP Details => %s\n\n", details.IP)
-	result += fmt.Sprintf("Txn Id => \n%s\n\n", "Admin")
+	result += fmt.Sprintf("IP Details => \n%s\n\n", details.IP)
+	result += fmt.Sprintf("Txn Id => %s\n\n", "Admin")
 
 	// Use sendMessage to send the result
 	err := sendRCMessage(result)

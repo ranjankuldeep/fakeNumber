@@ -9,8 +9,15 @@ import (
 )
 
 type BlockUserDetails struct {
-	Date      string
-	Email     string
+	Date  string
+	Email string
+
+	TotalRecharge  string
+	UsedBalance    string
+	CurrentBalance string
+	FraudAmount    string
+	ToBeBalance    string
+
 	Reason    string
 	IpDetails string
 }
@@ -20,6 +27,11 @@ func UserBlockDetails(blockInfo BlockUserDetails) error {
 	result := "User Block\n\n"
 	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05PM"))
 	result += fmt.Sprintf("User Email => %s\n\n", blockInfo.Email)
+	result += fmt.Sprintf("Total Rc => %s\n\n", blockInfo.TotalRecharge)
+	result += fmt.Sprintf("Used Balance => %s\n\n", blockInfo.UsedBalance)
+	result += fmt.Sprintf("To Be Balance => %s\n\n", blockInfo.ToBeBalance)
+	result += fmt.Sprintf("Current Balance => %s\n\n", blockInfo.CurrentBalance)
+	result += fmt.Sprintf("Fraud Amount => %s\n\n", blockInfo.FraudAmount)
 	result += fmt.Sprintf("Reason => %s\n\n", blockInfo.Reason)
 	result += fmt.Sprintf("IP Details => \n%s\n\n", blockInfo.IpDetails)
 	err := sendBlockMessage(result)

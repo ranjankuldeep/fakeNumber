@@ -284,10 +284,10 @@ func UpdateBalanceHandler(c echo.Context) error {
 		logs.Logger.Info("Balance difference detected, preparing recharge history")
 		rechargeHistory := map[string]interface{}{
 			"userId":         requestBody.UserID,
-			"transaction_id": "Admin", // Unique transaction ID
+			"transaction_id": fmt.Sprintf("Admin%02d%02d%02d", time.Now().Hour(), time.Now().Minute(), time.Now().Second()),
 			"amount":         fmt.Sprintf("%.2f", balanceDifference),
 			"payment_type":   "Admin Added",
-			"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"), // Format: MM/DD/YYYYThh:mm:ss A
+			"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
 			"status":         "Received",
 		}
 

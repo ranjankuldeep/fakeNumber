@@ -159,7 +159,6 @@ func CheckAndBlockUsers(db *mongo.Database) {
 		if adjustedTotal == 0 {
 			divider = 1
 		}
-		// diffAmount := adjustedTotal - walletBalance
 		balanceDifference := (walletBalance - adjustedTotal) / divider * 100
 		// logs.Logger.Infof("balnce differnce %f for user %v", balanceDifference, user.ID.String())
 
@@ -176,18 +175,27 @@ func CheckAndBlockUsers(db *mongo.Database) {
 			} else {
 				log.Printf("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
 				ipDetails, err := utils.GetIpDetails()
+				if err != nil {
+					logs.Logger.Error(err)
+				}
 
 				blockDetails := services.BlockUserDetails{
-					Email:     user.Email,
-					Reason:    fmt.Sprintf("User %s blocked due to balance mismatch (%.4f%% difference)", user.Email, balanceDifference),
-					Date:      time.Now().Format("02-01-2006 03:04:05pm"),
-					IpDetails: ipDetails,
+					Email:          user.Email,
+					Date:           time.Now().Format("02-01-2006 03:04:05pm"),
+					TotalRecharge:  fmt.Sprintf("%0.2f", totalRecharge),
+					UsedBalance:    fmt.Sprintf("%0.2f", totalTransactionPendingPrice+totalTransactionSuccessPrice),
+					CurrentBalance: fmt.Sprintf("%0.2f", walletBalance),
+					ToBeBalance:    fmt.Sprintf("%0.2f", totalRecharge-totalTransactionPendingPrice+totalTransactionSuccessPrice),
+					FraudAmount:    fmt.Sprintf("%0.2f", walletBalance-(totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice))),
+					Reason:         fmt.Sprintf("Due to Fraud"),
+					IpDetails:      ipDetails,
 				}
 				err = services.UserBlockDetails(blockDetails)
 				if err != nil {
 					logs.Logger.Info("unable to send block details")
 					logs.Logger.Error(err)
 				}
+				logs.Logger.Infof("%+v", blockDetails)
 			}
 		}
 	}

@@ -689,12 +689,13 @@ func ConstructBalanceUrl(server string, serverCred ServerCred) (BalanceRequest, 
 			Url:     fmt.Sprintf("https://api.sms-activate.guru/stubs/handler_api.php?api_key=%s&action=getBalance", serverCred.ApiKey),
 			Headers: map[string]string{},
 		}, nil
-	case "9":
+	case "10":
+		logs.Logger.Info(serverCred.ApiKey)
 		return BalanceRequest{
 			Url:     fmt.Sprintf("https://sms-activation-service.pro/stubs/handler_api?api_key=%s&action=getBalance", serverCred.ApiKey),
 			Headers: map[string]string{},
 		}, nil
-	case "10":
+	case "9":
 		return BalanceRequest{
 			Url:     fmt.Sprintf("https://own5k.in/p/ccpay.php?type=balance"),
 			Headers: map[string]string{},

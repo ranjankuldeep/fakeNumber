@@ -149,14 +149,18 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 		// Sum up the total recharge amount
 		dailyTotalRechargeAmount += result.TotalAmount
 
-		// Populate counts based on payment type
+		// Populate amounts based on payment type
 		switch result.ID {
 		case "trx":
-			details.RechargeDetails.Trx = float64(result.Count)
+			details.RechargeDetails.Trx = result.TotalAmount // Total amount for trx
 		case "upi":
-			details.RechargeDetails.Upi = float64(result.Count)
+			details.RechargeDetails.Upi = result.TotalAmount // Total amount for upi
+		case "Admin Added":
+			details.RechargeDetails.AdminAdded = result.TotalAmount // Total amount for Admin Added
 		}
 	}
+	// Set the daily total recharge amount
+	details.RechargeDetails.Total = dailyTotalRechargeAmount
 
 	// 4. Fetch Website Balance (Total Recharge Amount Irrespective of Time)
 	totalRechargePipeline := mongo.Pipeline{
@@ -229,18 +233,18 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 			details.ServersBalance["Smsbower"] = formattedBalance
 		case "8":
 			details.ServersBalance["Sms-activate"] = formattedBalance
-		case "9":
-			details.ServersBalance["Sms-activation-service"] = formattedBalance
 		case "10":
+			details.ServersBalance["Sms-activation-service"] = formattedBalance
+		case "9":
 			details.ServersBalance["CCPAY"] = formattedBalance
 		case "11":
 			details.ServersBalance["SMS-Man"] = formattedBalance
 		}
 	}
 	// Send selling details via TeleBot
-	// err = services.SellingTeleBot(details)
-	// if err != nil {
-	// 	logs.Logger.Errorf("Error sending selling message")
-	// }
+	err = services.SellingTeleBot(details)
+	if err != nil {
+		logs.Logger.Errorf("Error sending selling message")
+	}
 	return details, nil
 }

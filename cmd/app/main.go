@@ -16,7 +16,6 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
-	"github.com/ranjankuldeep/fakeNumber/internal/services"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
@@ -108,13 +107,13 @@ func main() {
 
 	go UpdateServerData(db, context.TODO())
 	go MonitorOrders(db)
-	go func() {
-		for {
-			CheckAndBlockUsers(db)
-			time.Sleep(2 * time.Second)
-		}
-	}()
-	detail, err := services.FetchSellingUpdate(context.TODO(), db)
+	// go func() {
+	// 	for {
+	// 		CheckAndBlockUsers(db)
+	// 		time.Sleep(2 * time.Second)
+	// 	}
+	// }()
+	detail, err := SendSellingUpdate(db)
 	if err != nil {
 		logs.Logger.Error(err)
 	}

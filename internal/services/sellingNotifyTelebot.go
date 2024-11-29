@@ -1,17 +1,12 @@
 package services
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
+	"sort"
 	"time"
-
-	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // Struct for selling update details
@@ -38,15 +33,24 @@ func SellingTeleBot(details SellingUpdateDetails) error {
 	result := fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05pm"))
 
 	// Total Selling Update
+	// Total Selling Update
 	result += "Total Number Selling Update\n"
-	result += fmt.Sprintf("Total Sold       => %d // success\n", details.TotalSold)
-	result += fmt.Sprintf("Total Cancelled  => %d // cancelled\n", details.TotalCancelled)
-	result += fmt.Sprintf("Total Pending    => %d // pending\n\n", details.TotalPending)
+	result += fmt.Sprintf("Total Sold       => %d\n", details.TotalSold)
+	result += fmt.Sprintf("Total Cancelled  => %d\n", details.TotalCancelled)
+	result += fmt.Sprintf("Total Pending    => %d\n\n", details.TotalPending)
 
-	// Number Selling Update Via Servers
+	// Number Selling Update Via Servers (Sorted Order)
 	result += "Number Selling Update Via Servers\n"
-	for server, count := range details.ServerUpdates {
-		result += fmt.Sprintf("Server %d => %d\n", server, count)
+	// Extract and sort keys
+	var keys []int
+	for server := range details.ServerUpdates {
+		keys = append(keys, server)
+	}
+	sort.Ints(keys) // Sort keys in ascending order
+
+	// Iterate over sorted keys
+	for _, server := range keys {
+		result += fmt.Sprintf("Server %d => %d\n", server, details.ServerUpdates[server])
 	}
 	result += "\n"
 
@@ -59,8 +63,17 @@ func SellingTeleBot(details SellingUpdateDetails) error {
 
 	// Servers Balance
 	result += "Servers Balance\n"
-	for server, balance := range details.ServersBalance {
-		result += fmt.Sprintf("%s => %s\n", server, balance)
+	serverOrder := []string{
+		"Fastsms", "5Sim", "Smshub", "TigerSMS", "GrizzlySMS",
+		"Tempnum", "Smsbower", "Sms-activate", "CCPAY", "Sms-activation-service", "SMS-Man",
+	}
+	for _, server := range serverOrder {
+		balance, exists := details.ServersBalance[server]
+		if exists {
+			result += fmt.Sprintf("%s => %s\n", server, balance)
+		} else {
+			result += fmt.Sprintf("%s => Not Available\n", server)
+		}
 	}
 	result += "\n"
 
@@ -68,7 +81,7 @@ func SellingTeleBot(details SellingUpdateDetails) error {
 	result += fmt.Sprintf("Website Balance  => %.2f\n", details.WebsiteBalance)
 	result += fmt.Sprintf("Total User Count => %d\n", details.TotalUserCount)
 
-	err := sendRCMessage(result)
+	err := sendSellingMessage(result)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %v", err)
 	}
@@ -98,181 +111,4 @@ func sendSellingMessage(message string) error {
 		return fmt.Errorf("Unable to send Message")
 	}
 	return nil
-}
-
-func FetchSellingUpdate(ctx context.Context, db *mongo.Database) (SellingUpdateDetails, error) {
-	var details SellingUpdateDetails
-
-	// 1. Fetch Total User Count
-	usersCollection := models.InitializeUserCollection(db)
-	totalUsers, err := usersCollection.CountDocuments(ctx, bson.M{})
-	if err != nil {
-		return details, fmt.Errorf("failed to fetch total user count: %w", err)
-	}
-	details.TotalUserCount = int(totalUsers)
-
-	// 2. Fetch Transaction Details
-	transactionCollection := models.InitializeTransactionHistoryCollection(db)
-
-	// Aggregate total sold, cancelled, and pending
-	transactionsPipeline := mongo.Pipeline{
-		bson.D{
-			{Key: "$group", Value: bson.D{
-				{Key: "_id", Value: "$status"},
-				{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
-			}},
-		},
-	}
-	cursor, err := transactionCollection.Aggregate(ctx, transactionsPipeline)
-	if err != nil {
-		return details, fmt.Errorf("failed to aggregate transaction data: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	// Process aggregated transaction data
-	for cursor.Next(ctx) {
-		var result struct {
-			ID    string `bson:"_id"`
-			Count int    `bson:"count"`
-		}
-		if err := cursor.Decode(&result); err != nil {
-			return details, fmt.Errorf("failed to decode transaction data: %w", err)
-		}
-
-		switch result.ID {
-		case "SUCCESS":
-			details.TotalSold = result.Count
-		case "CANCELLED":
-			details.TotalCancelled = result.Count
-		case "PENDING":
-			details.TotalPending = result.Count
-		}
-	}
-
-	// Aggregate transactions grouped by server
-	serverPipeline := mongo.Pipeline{
-		bson.D{
-			{Key: "$group", Value: bson.D{
-				{Key: "_id", Value: "$server"},
-				{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
-			}},
-		},
-	}
-	cursor, err = transactionCollection.Aggregate(ctx, serverPipeline)
-	if err != nil {
-		return details, fmt.Errorf("failed to aggregate server data: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	// Process aggregated server data
-	details.ServerUpdates = make(map[int]int)
-	for cursor.Next(ctx) {
-		var result struct {
-			ID    string `bson:"_id"`
-			Count int    `bson:"count"`
-		}
-		if err := cursor.Decode(&result); err != nil {
-			return details, fmt.Errorf("failed to decode server data: %w", err)
-		}
-
-		serverNumber, err := strconv.Atoi(result.ID)
-		if err != nil {
-			return details, fmt.Errorf("failed to convert server ID to int: %w", err)
-		}
-		details.ServerUpdates[serverNumber] = result.Count
-	}
-
-	// 3. Fetch Recharge Details
-	rechargeCollection := models.InitializeRechargeHistoryCollection(db)
-
-	// Get the current date
-	startOfDay := time.Now().Truncate(24 * time.Hour)            // Start of the day (12:00am)
-	endOfDay := startOfDay.Add(24 * time.Hour).Add(-time.Second) // End of the day (11:59:59pm)
-
-	// Define the pipeline for recharges within the day
-	rechargePipeline := mongo.Pipeline{
-		bson.D{{Key: "$addFields", Value: bson.D{
-			{Key: "amount", Value: bson.D{{Key: "$toDouble", Value: "$amount"}}}, // Convert amount to double
-		}}},
-		bson.D{{Key: "$match", Value: bson.D{
-			{Key: "status", Value: "Received"},                       // Only successful recharges
-			{Key: "amount", Value: bson.D{{Key: "$ne", Value: nil}}}, // Exclude null amounts
-			{Key: "createdAt", Value: bson.D{
-				{Key: "$gte", Value: startOfDay},
-				{Key: "$lte", Value: endOfDay},
-			}}, // Match the specific day
-		}}},
-		bson.D{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: "$payment_type"},                                 // Group by payment type
-			{Key: "totalAmount", Value: bson.D{{Key: "$sum", Value: "$amount"}}}, // Sum the amount per type
-			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},               // Count occurrences per type
-		}}},
-	}
-
-	cursor, err = rechargeCollection.Aggregate(ctx, rechargePipeline)
-	if err != nil {
-		return details, fmt.Errorf("failed to aggregate recharge data: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	var dailyTotalRechargeAmount float64
-	for cursor.Next(ctx) {
-		var result struct {
-			ID          string  `bson:"_id"`
-			TotalAmount float64 `bson:"totalAmount"`
-			Count       int     `bson:"count"`
-		}
-		if err := cursor.Decode(&result); err != nil {
-			return details, fmt.Errorf("failed to decode recharge data: %w", err)
-		}
-
-		// Sum up the total recharge amount
-		dailyTotalRechargeAmount += result.TotalAmount
-
-		// Populate counts based on payment type
-		switch result.ID {
-		case "trx":
-			details.RechargeDetails.Trx = float64(result.Count)
-		case "upi":
-			details.RechargeDetails.Upi = float64(result.Count)
-		}
-	}
-
-	// 4. Fetch Website Balance (Total Recharge Amount Irrespective of Time)
-	totalRechargePipeline := mongo.Pipeline{
-		bson.D{{Key: "$addFields", Value: bson.D{
-			{Key: "amount", Value: bson.D{{Key: "$toDouble", Value: "$amount"}}}, // Convert amount to double
-		}}},
-		bson.D{{Key: "$match", Value: bson.D{
-			{Key: "status", Value: "Received"},                       // Only successful recharges
-			{Key: "amount", Value: bson.D{{Key: "$ne", Value: nil}}}, // Exclude null amounts
-		}}},
-		bson.D{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: nil}, // Group all records
-			{Key: "totalAmount", Value: bson.D{{Key: "$sum", Value: "$amount"}}}, // Sum all amounts
-		}}},
-	}
-
-	cursor, err = rechargeCollection.Aggregate(ctx, totalRechargePipeline)
-	if err != nil {
-		return details, fmt.Errorf("failed to aggregate total recharge data: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	if cursor.Next(ctx) {
-		var totalResult struct {
-			TotalAmount float64 `bson:"totalAmount"`
-		}
-		if err := cursor.Decode(&totalResult); err != nil {
-			return details, fmt.Errorf("failed to decode total recharge data: %w", err)
-		}
-
-		// Set Website Balance
-		details.WebsiteBalance = totalResult.TotalAmount
-	}
-
-	// Set the daily total recharge amount
-	details.RechargeDetails.Total = dailyTotalRechargeAmount
-
-	return details, nil
 }

@@ -50,30 +50,27 @@ type IpDetails struct {
 // RechargeUpiApi handles the UPI recharge request
 func RechargeUpiApi(c echo.Context) error {
 	ctx := context.Background()
+	db := c.Get("db").(*mongo.Database)
 
 	transactionId := c.QueryParam("transactionId")
 	userId := c.QueryParam("userId")
-	// email := c.QueryParam("email")
 
 	if userId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_USER_ID"})
 	}
-	// userObjectID := primitive.ObjectIDFromHex(userId)
+	userObjectID, _ := primitive.ObjectIDFromHex(userId)
 	// if email == "" {
 	// 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_EMAIL"})
 	// }
 
-	// var user models.User
+	var user models.User
 
-	// userCollection := models.InitializeUserCollection(db)
-	// err := userCollection.FindOne(context.TODO(), bson.M{"_id": userObjectID}).Decode(&user)
-	// if err != nil {
-	// 	logs.Logger.Error(err)
-	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	// }
-
-	db := c.Get("db").(*mongo.Database)
-
+	userCollection := models.InitializeUserCollection(db)
+	err := userCollection.FindOne(context.TODO(), bson.M{"_id": userObjectID}).Decode(&user)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
 	// Check recharge maintenance
 	var rechargeData models.RechargeAPI
 	rechargeCollection := models.InitializeRechargeAPICollection(db)
@@ -122,7 +119,6 @@ func RechargeUpiApi(c echo.Context) error {
 
 	// Log the payload being sent
 	log.Printf("[INFO] Sending recharge history payload: %s", string(rechargePayloadBytes))
-
 	rechargeResp, err := http.Post(rechargeHistoryUrl, "application/json", bytes.NewReader(rechargePayloadBytes))
 	if err != nil {
 		log.Printf("[ERROR] Recharge history save error: %v", err)
@@ -152,6 +148,14 @@ func RechargeUpiApi(c echo.Context) error {
 
 	log.Println("[INFO] Recharge history saved successfully")
 
+	var apiWalletUser models.ApiWalletUser
+	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
+	err = apiWalletCollection.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&apiWalletUser)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch api wallet user"})
+	}
+
 	// Fetch IP details
 	ipDetails, err := utils.GetIpDetails()
 	if err != nil {
@@ -159,13 +163,19 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	// rechargeDetail := services.UpiRechargeDetails{
-	// 	Email: user.Email,
-	// 	UserID: userId,
-	// 	TrnID: transactionId,
-	// 	Balance: ,
-	// }
-
+	rechargeDetail := services.UpiRechargeDetails{
+		Email:   user.Email,
+		UserID:  userId,
+		TrnID:   transactionId,
+		Amount:  fmt.Sprintf("%d", upiData.Amount),
+		Balance: fmt.Sprintf("%0.2f", apiWalletUser.Balance),
+		IP:      ipDetails,
+	}
+	err = services.UpiRechargeTeleBot(rechargeDetail)
+	if err != nil {
+		logs.Logger.Error(err)
+		logs.Logger.Error("Unable to send upi recharge message")
+	}
 	// Respond to client
 	return c.JSON(http.StatusOK, map[string]string{
 		"message":   fmt.Sprintf("%d₹ Added Successfully!", upiData.Amount),
@@ -383,11 +393,11 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 	rechargeDetail.Status = "ok"
-	// err = services.TrxRechargeTeleBot(rechargeDetail)
-	// if err != nil {
-	// 	logs.Logger.Error(err)
-	// 	logs.Logger.Info("recharget trx send failed")
-	// }
+	err = services.TrxRechargeTeleBot(rechargeDetail)
+	if err != nil {
+		logs.Logger.Error(err)
+		logs.Logger.Info("recharget trx send failed")
+	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
 		"ipDetails": ipDetails,

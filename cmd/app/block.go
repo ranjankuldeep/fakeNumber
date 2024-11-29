@@ -185,7 +185,7 @@ func CheckAndBlockUsers(db *mongo.Database) {
 					TotalRecharge:  fmt.Sprintf("%0.2f", totalRecharge),
 					UsedBalance:    fmt.Sprintf("%0.2f", totalTransactionPendingPrice+totalTransactionSuccessPrice),
 					CurrentBalance: fmt.Sprintf("%0.2f", walletBalance),
-					ToBeBalance:    fmt.Sprintf("%0.2f", totalRecharge-totalTransactionPendingPrice+totalTransactionSuccessPrice),
+					ToBeBalance:    fmt.Sprintf("%0.2f", totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice)),
 					FraudAmount:    fmt.Sprintf("%0.2f", walletBalance-(totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice))),
 					Reason:         fmt.Sprintf("Due to Fraud"),
 					IpDetails:      ipDetails,

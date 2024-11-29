@@ -226,25 +226,113 @@ func GetUpiQR(c echo.Context) error {
 }
 
 // UpdateBalanceHandler handles balance updates for a user
-func UpdateBalanceHandler(c echo.Context) error {
+func UpdateRechargeHandler(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	walletCol := models.InitializeApiWalletuserCollection(db)
-
-	logs.Logger.Info("Starting UpdateBalanceHandler")
-
-	// Parse request body
 	var requestBody struct {
-		UserID     string  `json:"userId"`
-		NewBalance float64 `json:"new_balance"`
+		UserID         string  `json:"userId"`
+		RechargeAmount float64 `json:"recharge_amount"`
 	}
 	if err := c.Bind(&requestBody); err != nil {
 		logs.Logger.Error("Failed to bind request body: ", err)
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid request body"})
 	}
+	if requestBody.UserID == "" || requestBody.RechargeAmount == 0 {
+		logs.Logger.Warn("Validation failed: UserID or NewBalance is missing")
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "User ID and new_balance are required"})
+	}
+	userObjectID, _ := primitive.ObjectIDFromHex(requestBody.UserID)
 
-	logs.Logger.Infof("Received request to update balance for UserID: %s, NewBalance: %.2f", requestBody.UserID, requestBody.NewBalance)
+	var user models.User
+	userCollection := models.InitializeUserCollection(db)
+	err := userCollection.FindOne(context.TODO(), bson.M{
+		"_id": userObjectID,
+	}).Decode(&user)
 
-	// Validate input
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rechargeHistory := map[string]interface{}{
+		"userId":         requestBody.UserID,
+		"transaction_id": fmt.Sprintf("Admin%02d%02d%02d", time.Now().Hour(), time.Now().Minute(), time.Now().Second()),
+		"amount":         fmt.Sprintf("%.2f", requestBody.RechargeAmount),
+		"payment_type":   "Admin Added",
+		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
+		"status":         "Received",
+	}
+
+	host := c.Request().Host
+	// Todo when hosting
+	protocol := "http" // Change to "https" if you're using HTTPS
+	rechargeHistoryURL := fmt.Sprintf("%s://%s/api/save-recharge-history", protocol, host)
+	rechargeHistoryJSON, _ := json.Marshal(rechargeHistory)
+	req, err := http.NewRequest("POST", rechargeHistoryURL, bytes.NewBuffer(rechargeHistoryJSON))
+	if err != nil {
+		logs.Logger.Error("Failed to create recharge history request: ", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create recharge history request"})
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	logs.Logger.Infof("Sending recharge history request to URL: %s", rechargeHistoryURL)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		logs.Logger.Errorf("Failed to save recharge history: %v, Status Code: %d", err, resp.StatusCode)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to save recharge history"})
+	}
+	defer resp.Body.Close()
+	logs.Logger.Info("Recharge history saved successfully")
+
+	var walletUser models.ApiWalletUser
+	err = walletCol.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&walletUser)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			logs.Logger.Warnf("No user found with UserID: %s", requestBody.UserID)
+			return c.JSON(http.StatusNotFound, echo.Map{"message": "User not found"})
+		}
+		logs.Logger.Error("Failed to fetch user: ", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch user"})
+	}
+
+	ipDetail, err := utils.GetIpDetails()
+	if err != nil {
+		logs.Logger.Error(err)
+	}
+
+	rechargeDetails := services.AdminRechargeDetails{
+		Email:          user.Email,
+		UserID:         userObjectID.Hex(),
+		UpdatedBalance: fmt.Sprintf("%0.2f", walletUser.Balance),
+		Amount:         fmt.Sprintf("%0.2f", requestBody.RechargeAmount),
+		IP:             ipDetail,
+	}
+
+	err = services.AdminRechargeTeleBot(rechargeDetails)
+	if err != nil {
+		logs.Logger.Error(err)
+		logs.Logger.Info("Error sending Admin Recharge")
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"message":  "Recharge Added Successfully",
+		"recharge": requestBody.RechargeAmount,
+	})
+}
+
+func UpdateWalletBalanceHandler(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	walletCol := models.InitializeApiWalletuserCollection(db)
+	var requestBody struct {
+		UserID     string  `json:"userId"`
+		NewBalance float64 `json:"new_balance"`
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := c.Bind(&requestBody); err != nil {
+		logs.Logger.Error("Failed to bind request body: ", err)
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid request body"})
+	}
 	if requestBody.UserID == "" || requestBody.NewBalance == 0 {
 		logs.Logger.Warn("Validation failed: UserID or NewBalance is missing")
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "User ID and new_balance are required"})
@@ -257,64 +345,6 @@ func UpdateBalanceHandler(c echo.Context) error {
 		"_id": userObjectID,
 	}).Decode(&user)
 
-	// Create a MongoDB context with a timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	logs.Logger.Info("Fetching user from wallet collection")
-	// Find the user by userId
-	var walletUser models.ApiWalletUser
-	err = walletCol.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&walletUser)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			logs.Logger.Warnf("No user found with UserID: %s", requestBody.UserID)
-			return c.JSON(http.StatusNotFound, echo.Map{"message": "User not found"})
-		}
-		logs.Logger.Error("Failed to fetch user: ", err)
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch user"})
-	}
-
-	// Calculate the balance difference
-	oldBalance := walletUser.Balance
-	balanceDifference := requestBody.NewBalance - oldBalance
-	logs.Logger.Infof("Old Balance: %.2f, New Balance: %.2f, Balance Difference: %.2f", oldBalance, requestBody.NewBalance, balanceDifference)
-
-	// Save the recharge history if there's a balance change
-	if balanceDifference != 0 {
-		logs.Logger.Info("Balance difference detected, preparing recharge history")
-		rechargeHistory := map[string]interface{}{
-			"userId":         requestBody.UserID,
-			"transaction_id": fmt.Sprintf("Admin%02d%02d%02d", time.Now().Hour(), time.Now().Minute(), time.Now().Second()),
-			"amount":         fmt.Sprintf("%.2f", balanceDifference),
-			"payment_type":   "Admin Added",
-			"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
-			"status":         "Received",
-		}
-
-		// Prepare request for saving recharge history
-		host := c.Request().Host
-		protocol := "http" // Change to "https" if you're using HTTPS
-		rechargeHistoryURL := fmt.Sprintf("%s://%s/api/save-recharge-history", protocol, host)
-		rechargeHistoryJSON, _ := json.Marshal(rechargeHistory)
-		req, err := http.NewRequest("POST", rechargeHistoryURL, bytes.NewBuffer(rechargeHistoryJSON))
-		if err != nil {
-			logs.Logger.Error("Failed to create recharge history request: ", err)
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create recharge history request"})
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		logs.Logger.Infof("Sending recharge history request to URL: %s", rechargeHistoryURL)
-		client := &http.Client{Timeout: 5 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil || resp.StatusCode != http.StatusOK {
-			logs.Logger.Errorf("Failed to save recharge history: %v, Status Code: %d", err, resp.StatusCode)
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to save recharge history"})
-		}
-		defer resp.Body.Close()
-		logs.Logger.Info("Recharge history saved successfully")
-	}
-
-	// Update the user's balance in the database
 	update := bson.M{"$set": bson.M{"balance": requestBody.NewBalance}}
 	logs.Logger.Info("Updating user balance in the database")
 	_, err = walletCol.UpdateOne(ctx, bson.M{"userId": userObjectID}, update)
@@ -322,29 +352,9 @@ func UpdateBalanceHandler(c echo.Context) error {
 		logs.Logger.Error("Failed to update balance: ", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update balance"})
 	}
-
-	ipDetail, err := utils.GetIpDetails()
-	if err != nil {
-		logs.Logger.Error(err)
-	}
-
-	rechargeDetails := services.AdminRechargeDetails{
-		Email:          user.Email,
-		UserID:         userObjectID.Hex(),
-		UpdatedBalance: fmt.Sprintf("%0.2f", requestBody.NewBalance),
-		Amount:         fmt.Sprintf("%0.2f", balanceDifference),
-		IP:             ipDetail,
-	}
-
-	err = services.AdminRechargeTeleBot(rechargeDetails)
-	if err != nil {
-		logs.Logger.Error(err)
-		logs.Logger.Info("Error sending Admin Recharge")
-	}
-
 	return c.JSON(http.StatusOK, echo.Map{
-		"message": "Balance updated successfully",
-		"balance": requestBody.NewBalance,
+		"message":    "Balance Updated Successfully",
+		"newBalance": requestBody.NewBalance,
 	})
 }
 

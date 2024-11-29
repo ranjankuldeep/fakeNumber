@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/internal/services"
+	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 
 	"github.com/google/uuid"
@@ -116,26 +118,6 @@ func ChangeAPIKeyHandler(c echo.Context) error {
 
 // Handler to update UPI QR code
 func UpiQRUpdateHandler(c echo.Context) error {
-	// file := c.FormValue("file")
-	// if file == "" {
-	// 	return c.String(http.StatusBadRequest, "QR code file is required")
-	// }
-
-	// base64Data := file[strings.IndexByte(file, ',')+1:]
-	// bufferData, err := base64.StdEncoding.DecodeString(base64Data)
-	// if err != nil {
-	// 	return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid file format"})
-	// }
-
-	// filePath := filepath.Join("uploads", "upi-qr-code.png")
-	// os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
-
-	// err = ioutil.WriteFile(filePath, bufferData, 0644)
-	// if err != nil {
-	// 	return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to save QR code"})
-	// }
-
-	// return c.String(http.StatusOK, "QR code updated successfully")
 	return nil
 }
 
@@ -267,11 +249,13 @@ func UpdateBalanceHandler(c echo.Context) error {
 		logs.Logger.Warn("Validation failed: UserID or NewBalance is missing")
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "User ID and new_balance are required"})
 	}
-	userObjectID, err := primitive.ObjectIDFromHex(requestBody.UserID)
-	if err != nil {
-		logs.Logger.Error("Failed to convert UserID to ObjectID: ", err)
-		return c.JSON(http.StatusBadRequest, echo.Map{"message": "Invalid User ID format"})
-	}
+	userObjectID, _ := primitive.ObjectIDFromHex(requestBody.UserID)
+
+	var user models.User
+	userCollection := models.InitializeUserCollection(db)
+	err := userCollection.FindOne(context.TODO(), bson.M{
+		"_id": userObjectID,
+	}).Decode(&user)
 
 	// Create a MongoDB context with a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -279,10 +263,8 @@ func UpdateBalanceHandler(c echo.Context) error {
 
 	logs.Logger.Info("Fetching user from wallet collection")
 	// Find the user by userId
-	var user struct {
-		Balance float64 `bson:"balance"`
-	}
-	err = walletCol.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&user)
+	var walletUser models.ApiWalletUser
+	err = walletCol.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&walletUser)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			logs.Logger.Warnf("No user found with UserID: %s", requestBody.UserID)
@@ -293,7 +275,7 @@ func UpdateBalanceHandler(c echo.Context) error {
 	}
 
 	// Calculate the balance difference
-	oldBalance := user.Balance
+	oldBalance := walletUser.Balance
 	balanceDifference := requestBody.NewBalance - oldBalance
 	logs.Logger.Infof("Old Balance: %.2f, New Balance: %.2f, Balance Difference: %.2f", oldBalance, requestBody.NewBalance, balanceDifference)
 
@@ -341,9 +323,24 @@ func UpdateBalanceHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update balance"})
 	}
 
-	logs.Logger.Infof("Balance updated successfully for UserID: %s", requestBody.UserID)
+	ipDetail, err := utils.GetIpDetails()
+	if err != nil {
+		logs.Logger.Error(err)
+	}
+	// send the telebot message then
+	rechargeDetails := services.AdminRechargeDetails{
+		Email:          user.Email,
+		UserID:         userObjectID.Hex(),
+		UpdatedBalance: fmt.Sprintf("%0.2f", requestBody.NewBalance),
+		Amount:         fmt.Sprintf("%0.2f", balanceDifference),
+		IP:             ipDetail,
+	}
+	err = services.AdminRechargeTeleBot(rechargeDetails)
+	if err != nil {
+		logs.Logger.Error(err)
+		logs.Logger.Info("Error sending Admin Recharge")
+	}
 
-	// Send the response
 	return c.JSON(http.StatusOK, echo.Map{
 		"message": "Balance updated successfully",
 		"balance": requestBody.NewBalance,

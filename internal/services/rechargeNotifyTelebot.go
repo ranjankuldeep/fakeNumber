@@ -89,7 +89,7 @@ func TrxRechargeTeleBot(details TrxRechargeDetails) error {
 	return nil
 }
 
-func UpiRechargeTeleBot(details UpiRechargeDetails) (string, error) {
+func UpiRechargeTeleBot(details UpiRechargeDetails) error {
 	result := "Upi Recharge\n\n"
 	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05 PM"))
 	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
@@ -101,9 +101,26 @@ func UpiRechargeTeleBot(details UpiRechargeDetails) (string, error) {
 	// Use sendMessage to send the result
 	err := sendRCMessage(result)
 	if err != nil {
-		return "", fmt.Errorf("failed to send message: %v", err)
+		return fmt.Errorf("failed to send message: %v", err)
 	}
-	return result, nil
+	return nil
+}
+
+func AdminRechargeTeleBot(details AdminRechargeDetails) error {
+	result := "Recharge By Admin\n\n"
+	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05 PM"))
+	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
+	result += fmt.Sprintf("Amount => %s₹\n\n", details.Amount) // Use string Amount directly
+	result += fmt.Sprintf("Updated Balance => %s\n\n", details.UpdatedBalance)
+	result += fmt.Sprintf("IP Details => %s\n\n", details.IP)
+	result += fmt.Sprintf("Txn Id => \n%s\n\n", "Admin")
+
+	// Use sendMessage to send the result
+	err := sendRCMessage(result)
+	if err != nil {
+		return fmt.Errorf("failed to send message: %v", err)
+	}
+	return nil
 }
 
 func sendRCMessage(message string) error {

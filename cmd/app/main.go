@@ -107,12 +107,12 @@ func main() {
 
 	go UpdateServerData(db, context.TODO())
 	go MonitorOrders(db)
-	// go func() {
-	// 	for {
-	// 		CheckAndBlockUsers(db)
-	// 		time.Sleep(2 * time.Second)
-	// 	}
-	// }()
-	go SendSellingUpdate(db)
+	go func() {
+		for {
+			CheckAndBlockUsers(db)
+			time.Sleep(1 * time.Second)
+		}
+	}()
+	// go SendSellingUpdate(db)
 	e.Logger.Fatal(e.Start(":8000"))
 }

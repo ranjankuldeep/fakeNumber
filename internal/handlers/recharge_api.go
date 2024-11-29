@@ -105,6 +105,17 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
 	}
 
+	var minimumRecharge models.MinimumRecharge
+	minimumCollection := models.InitializeMinimumCollection(db)
+	err = minimumCollection.FindOne(ctx, bson.M{}).Decode(&minimumRecharge)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
+	}
+
+	if float64(upiData.Amount) < minimumRecharge.MinimumRecharge {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Recharge amount is less than %0.2f amount", minimumRecharge.MinimumRecharge)})
+	}
 	// Prepare payload for SaveRechargeHistory
 	rechargeHistoryUrl := fmt.Sprintf("%sapi/save-recharge-history", os.Getenv("BASE_API_URL"))
 	rechargePayload := map[string]interface{}{

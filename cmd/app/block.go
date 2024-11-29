@@ -159,6 +159,7 @@ func CheckAndBlockUsers(db *mongo.Database) {
 		if adjustedTotal == 0 {
 			divider = 1
 		}
+		// diffAmount := adjustedTotal - walletBalance
 		balanceDifference := (walletBalance - adjustedTotal) / divider * 100
 		// logs.Logger.Infof("balnce differnce %f for user %v", balanceDifference, user.ID.String())
 

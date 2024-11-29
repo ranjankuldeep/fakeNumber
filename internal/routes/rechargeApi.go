@@ -14,13 +14,13 @@ func RegisterRechargeRoutes(e *echo.Echo) {
 	rechargeGroup.GET("recharge-trx-transaction", handlers.RechargeTrxApi)
 	rechargeGroup.GET("exchange-rate", handlers.ExchangeRate)
 	rechargeGroup.GET("get-recharge-maintenance", handlers.GetMaintenanceStatus)
-	rechargeGroup.GET("get-minimum-recharge", handlers.GetMinimumRecharge)
+	// rechargeGroup.GET("get-minimum-recharge", handlers.GetMinimumRecharge)
 
 	// Define POST routes
 	rechargeGroup.POST("recharge-maintenance-toggle", handlers.ToggleMaintenance)
-	rechargeGroup.POST("add-minimum-recharge", handlers.AddMinimumRecharge)
+	// rechargeGroup.POST("add-minimum-recharge", handlers.AddMinimumRecharge)
 
 	// Define DELETE routes
-	rechargeGroup.DELETE("delete-minimum-recharge", handlers.DeleteMinimumRecharge)
+	// rechargeGroup.DELETE("delete-minimum-recharge", handlers.DeleteMinimumRecharge)
 
 }

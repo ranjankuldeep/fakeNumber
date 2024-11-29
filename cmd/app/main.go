@@ -16,6 +16,8 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
+	"github.com/ranjankuldeep/fakeNumber/internal/services"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 func Load(envFile string) {
@@ -112,5 +114,10 @@ func main() {
 	// 		time.Sleep(2 * time.Second)
 	// 	}
 	// }()
+	detail, err := services.FetchSellingUpdate(context.TODO(), db)
+	if err != nil {
+		logs.Logger.Error(err)
+	}
+	fmt.Printf("%+v\n", detail)
 	e.Logger.Fatal(e.Start(":8000"))
 }

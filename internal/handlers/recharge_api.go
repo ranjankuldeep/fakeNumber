@@ -53,15 +53,23 @@ func RechargeUpiApi(c echo.Context) error {
 
 	transactionId := c.QueryParam("transactionId")
 	userId := c.QueryParam("userId")
-	email := c.QueryParam("email")
+	// email := c.QueryParam("email")
 
 	if userId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_USER_ID"})
 	}
+	// userObjectID := primitive.ObjectIDFromHex(userId)
+	// if email == "" {
+	// 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_EMAIL"})
+	// }
 
-	if email == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_EMAIL"})
-	}
+	// var user models.User
+	// userCollection := models.InitializeUserCollection(db)
+	// err := userCollection.FindOne(context.TODO(), bson.M{"_id": userObjectID}).Decode(&user)
+	// if err != nil {
+	// 	logs.Logger.Error(err)
+	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	// }
 
 	db := c.Get("db").(*mongo.Database)
 
@@ -149,6 +157,13 @@ func RechargeUpiApi(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+
+	// rechargeDetail := services.UpiRechargeDetails{
+	// 	Email: user.Email,
+	// 	UserID: userId,
+	// 	TrnID: transactionId,
+	// 	Balance: ,
+	// }
 
 	// Respond to client
 	return c.JSON(http.StatusOK, map[string]string{

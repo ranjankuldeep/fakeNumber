@@ -327,7 +327,7 @@ func UpdateBalanceHandler(c echo.Context) error {
 	if err != nil {
 		logs.Logger.Error(err)
 	}
-	// send the telebot message then
+
 	rechargeDetails := services.AdminRechargeDetails{
 		Email:          user.Email,
 		UserID:         userObjectID.Hex(),
@@ -335,6 +335,7 @@ func UpdateBalanceHandler(c echo.Context) error {
 		Amount:         fmt.Sprintf("%0.2f", balanceDifference),
 		IP:             ipDetail,
 	}
+
 	err = services.AdminRechargeTeleBot(rechargeDetails)
 	if err != nil {
 		logs.Logger.Error(err)

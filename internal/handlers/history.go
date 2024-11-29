@@ -96,28 +96,34 @@ func GetTransactionHistory(c echo.Context) error {
 
 // Handler to save a recharge history entry
 func SaveRechargeHistory(c echo.Context) error {
-	fmt.Println("SaveRechargeHistory")
+	log.Println("[INFO] SaveRechargeHistory handler called")
 
 	// Get MongoDB collections
 	db := c.Get("db").(*mongo.Database)
 	rechargeHistoryCol := models.InitializeRechargeHistoryCollection(db)
 	apiWalletCol := models.InitializeApiWalletuserCollection(db)
 
+	log.Println("[INFO] MongoDB collections initialized")
+
 	// Request payload structure
 	var request struct {
 		UserID        string      `json:"userId"`
 		TransactionID string      `json:"transaction_id"`
-		Amount        json.Number `json:"amount"` // Use json.Number for flexible type handling
+		Amount        json.Number `json:"amount"`
 		PaymentType   string      `json:"payment_type"`
 		DateTime      string      `json:"date_time"`
 		Status        string      `json:"status"`
 	}
 
 	// Bind request payload
+	log.Println("[INFO] Binding request payload")
 	if err := c.Bind(&request); err != nil {
 		log.Println("[ERROR] Invalid request body:", err)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request body"})
 	}
+
+	// Log received payload
+	log.Printf("[DEBUG] Received payload: %+v\n", request)
 
 	// Validate required fields
 	if request.UserID == "" || request.TransactionID == "" || request.Amount.String() == "" ||
@@ -127,39 +133,38 @@ func SaveRechargeHistory(c echo.Context) error {
 	}
 
 	// Validate amount
+	log.Println("[INFO] Validating amount")
 	requestAmountFloat, err := request.Amount.Float64()
 	if err != nil || requestAmountFloat <= 0 {
 		log.Println("[ERROR] Invalid amount:", request.Amount.String())
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid amount"})
 	}
+	log.Printf("[DEBUG] Parsed amount: %.2f\n", requestAmountFloat)
 
-	// Define date-time formats
+	// Validate and format date-time
+	log.Println("[INFO] Validating and formatting date_time")
 	const primaryDateTimeFormat = "01/02/2006T03:04:05 PM"
-	const secondaryDateTimeFormat = "2006-01-02 03:04:05 PM" // Second format
-
+	const secondaryDateTimeFormat = "2006-01-02 03:04:05 PM"
 	var formattedDateTime string
 
-	// Attempt to parse with the primary format
 	parsedTime, err := time.Parse(primaryDateTimeFormat, request.DateTime)
 	if err != nil {
-		// Log primary format failure
-		log.Println("[ERROR] Invalid date_time format with primary format:", request.DateTime, "Expected format:", primaryDateTimeFormat)
-		// Attempt with the secondary format
+		log.Println("[ERROR] Invalid date_time format with primary format:", request.DateTime)
 		parsedTime, err = time.Parse(secondaryDateTimeFormat, request.DateTime)
 		if err != nil {
-			// Log secondary format failure and return error
-			log.Println("[ERROR] Invalid date_time format with secondary format:", request.DateTime, "Expected format:", secondaryDateTimeFormat)
+			log.Println("[ERROR] Invalid date_time format with secondary format:", request.DateTime)
 			return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid date_time format"})
 		}
 	}
-
-	// Format the parsed time
 	formattedDateTime = parsedTime.Format(primaryDateTimeFormat)
+	log.Printf("[DEBUG] Formatted date_time: %s\n", formattedDateTime)
 
+	// Context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Check if the transaction already exists
+	log.Println("[INFO] Checking if transaction already exists")
 	var existingTransaction models.RechargeHistory
 	err = rechargeHistoryCol.FindOne(ctx, bson.M{"transaction_id": request.TransactionID}).Decode(&existingTransaction)
 	if err == nil {
@@ -169,17 +174,17 @@ func SaveRechargeHistory(c echo.Context) error {
 		log.Println("[ERROR] Database error while checking transaction:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
-	log.Printf("[DEBUG] Updating balance for userId: %s with amount: %.2f", request.UserID, requestAmountFloat)
 
 	// Convert UserID to ObjectId
+	log.Println("[INFO] Converting userId to ObjectId")
 	userObjectID, err := primitive.ObjectIDFromHex(request.UserID)
-	fmt.Println("userObjectID", userObjectID)
 	if err != nil {
 		log.Println("[ERROR] Invalid userId format:", request.UserID)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
 	}
 
 	// Fetch user's wallet
+	log.Println("[INFO] Fetching user wallet")
 	var userWallet models.ApiWalletUser
 	err = apiWalletCol.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&userWallet)
 	if err != nil {
@@ -193,22 +198,26 @@ func SaveRechargeHistory(c echo.Context) error {
 
 	// Update balance if status is "Received"
 	if request.Status == "Received" {
+		log.Printf("[INFO] Updating balance for userId: %s with amount: %.2f\n", request.UserID, requestAmountFloat)
 		_, err := apiWalletCol.UpdateOne(ctx,
 			bson.M{"userId": userObjectID},
-			bson.M{"$inc": bson.M{"balance": requestAmountFloat}}, // Use the parsed float for the update
+			bson.M{"$inc": bson.M{"balance": requestAmountFloat}},
 		)
 		if err != nil {
 			log.Println("[ERROR] Failed to update user balance:", err)
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update balance"})
 		}
+		log.Println("[INFO] Balance updated successfully")
 	}
+
 	// Save recharge history
+	log.Println("[INFO] Saving recharge history")
 	rechargeHistory := models.RechargeHistory{
 		UserID:        request.UserID,
 		TransactionID: request.TransactionID,
-		Amount:        fmt.Sprintf("%.2f", requestAmountFloat), // Ensure consistent formatting
+		Amount:        fmt.Sprintf("%.2f", requestAmountFloat),
 		PaymentType:   request.PaymentType,
-		DateTime:      formattedDateTime, // Save formatted date_time
+		DateTime:      formattedDateTime,
 		Status:        request.Status,
 	}
 	_, err = rechargeHistoryCol.InsertOne(ctx, rechargeHistory)

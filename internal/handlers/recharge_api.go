@@ -64,6 +64,7 @@ func RechargeUpiApi(c echo.Context) error {
 	// }
 
 	// var user models.User
+
 	// userCollection := models.InitializeUserCollection(db)
 	// err := userCollection.FindOne(context.TODO(), bson.M{"_id": userObjectID}).Decode(&user)
 	// if err != nil {

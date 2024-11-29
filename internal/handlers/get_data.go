@@ -614,14 +614,14 @@ func GetServerBalanceHandler(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Error fetching server balance"})
 	}
-	return c.JSON(http.StatusOK, echo.Map{"balance": balance.Value, "symbol": balance.Symbol})
+	return c.JSON(http.StatusOK, echo.Map{"balance": fmt.Sprintf("%0.2f%s", balance.Value, balance.Symbol)})
 }
 
 func GetServerBalance(db *mongo.Database, server string) (Balance, error) {
 	serverNumber, _ := strconv.Atoi(server)
 	var serverInfo models.Server
 	serverCollection := models.InitializeServerCollection(db)
-	err := serverCollection.FindOne(context.TODO(), bson.M{"server": serverNumber}).Decode(&server)
+	err := serverCollection.FindOne(context.TODO(), bson.M{"server": serverNumber}).Decode(&serverInfo)
 	if err != nil {
 		logs.Logger.Error(err)
 		return Balance{}, err
@@ -783,13 +783,14 @@ func FetchBalance(server string, apiURL string, headers map[string]string) (Bala
 
 	case "11":
 		var responseDataJSON struct {
-			Balance float64 `json:"balance"`
+			Balance string `json:"balance"`
 		}
 		err = json.Unmarshal(body, &responseDataJSON)
 		if err != nil {
 			return Balance{}, fmt.Errorf("failed to parse JSON response: %w", err)
 		}
-		return Balance{Value: responseDataJSON.Balance, Symbol: "p"}, nil
+		floatValue, _ := strconv.ParseFloat(responseDataJSON.Balance, 64)
+		return Balance{Value: floatValue, Symbol: "p"}, nil
 
 	default:
 		return Balance{}, errors.New("INVALID_SERVER_VALUE")

@@ -16,7 +16,6 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
-	"github.com/ranjankuldeep/fakeNumber/logs"
 )
 
 func Load(envFile string) {
@@ -104,6 +103,7 @@ func main() {
 	routes.RegisterServiceDiscountRoutes(e)
 	routes.RegisterServerDiscountRoutes(e)
 	routes.RegisterApisRoutes(e)
+	routes.RegisterBlockUsersRoutes(e)
 
 	go UpdateServerData(db, context.TODO())
 	go MonitorOrders(db)
@@ -113,10 +113,6 @@ func main() {
 	// 		time.Sleep(2 * time.Second)
 	// 	}
 	// }()
-	detail, err := SendSellingUpdate(db)
-	if err != nil {
-		logs.Logger.Error(err)
-	}
-	fmt.Printf("%+v\n", detail)
+	go SendSellingUpdate(db)
 	e.Logger.Fatal(e.Start(":8000"))
 }

@@ -118,6 +118,15 @@ func CheckAndBlockUsers(db *mongo.Database) {
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
 
+	blockToggler, err := FetchBlockStatus(context.TODO(), db)
+	if err != nil {
+		logs.Logger.Error(err)
+		return
+	}
+	if blockToggler == false {
+		return
+	}
+
 	ctx := context.Background()
 	users, err := fetchAllUsers(ctx, db)
 	if err != nil {
@@ -199,4 +208,17 @@ func CheckAndBlockUsers(db *mongo.Database) {
 			}
 		}
 	}
+}
+
+func FetchBlockStatus(ctx context.Context, db *mongo.Database) (bool, error) {
+	blockTogglerCollection := models.InitializeBlockToggler(db)
+	var blockStatus models.ToggleBlock
+	err := blockTogglerCollection.FindOne(ctx, bson.M{}).Decode(&blockStatus)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, fmt.Errorf("block status not found in the collection")
+		}
+		return false, fmt.Errorf("failed to fetch block status: %w", err)
+	}
+	return blockStatus.Block, nil
 }

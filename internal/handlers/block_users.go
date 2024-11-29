@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var predefinedBlockTypes = []models.Block{
@@ -42,58 +42,58 @@ func SavePredefinedBlockTypes(c echo.Context) error {
 	return c.JSON(http.StatusCreated, echo.Map{"message": "Block types saved successfully"})
 }
 
-// Handler to toggle the status of a block type
 func ToggleBlockStatus(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	blockCol := models.InitializeBlockCollection(db)
+	blockCol := models.InitializeBlockToggler(db)
 
 	var request struct {
-		BlockType string `json:"blockType"`
-		Status    bool   `json:"status"`
+		Status bool `json:"status"`
 	}
 	if err := c.Bind(&request); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid input"})
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	update := bson.M{"$set": bson.M{"status": request.Status}}
-	result := blockCol.FindOneAndUpdate(ctx, bson.M{"block_type": request.BlockType}, update, options.FindOneAndUpdate().SetReturnDocument(options.After))
-
-	var updatedRecord models.Block
-	err := result.Decode(&updatedRecord)
-	if err == mongo.ErrNoDocuments {
-		return c.JSON(http.StatusNotFound, echo.Map{"message": "Block type not found"})
-	} else if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error updating block status"})
+	update := bson.D{
+		{Key: "$set", Value: bson.D{
+			{Key: "block", Value: request.Status},
+			{Key: "updatedAt", Value: time.Now()}, // Update the timestamp
+		}},
 	}
-
-	return c.JSON(http.StatusOK, echo.Map{"message": "Block status updated successfully", "data": updatedRecord})
+	result, err := blockCol.UpdateOne(c.Request().Context(), bson.M{}, update)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update block status"})
+	}
+	if result.MatchedCount == 0 {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "Block status document not found"})
+	}
+	return c.JSON(http.StatusOK, echo.Map{
+		"message": "Block status updated successfully",
+		"data": bson.M{
+			"block":     request.Status,
+			"updatedAt": time.Now(),
+		},
+	})
 }
 
-// Handler to retrieve the status of a block type
 func GetBlockStatus(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	blockCol := models.InitializeBlockCollection(db)
-
-	blockType := c.QueryParam("blockType")
-	if blockType == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "blockType is required"})
+	blockStatus, err := FetchBlockStatus(context.TODO(), db)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "Unable to Fetch Block Status"})
 	}
+	return c.JSON(http.StatusOK, echo.Map{"status": blockStatus})
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var record models.Block
-	err := blockCol.FindOne(ctx, bson.M{"block_type": blockType}).Decode(&record)
-	if err == mongo.ErrNoDocuments {
-		return c.JSON(http.StatusNotFound, echo.Map{"message": "Block type not found"})
-	} else if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error fetching block status"})
+func FetchBlockStatus(ctx context.Context, db *mongo.Database) (bool, error) {
+	blockTogglerCollection := models.InitializeBlockToggler(db)
+	var blockStatus models.ToggleBlock
+	err := blockTogglerCollection.FindOne(ctx, bson.M{}).Decode(&blockStatus)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, fmt.Errorf("block status not found in the collection")
+		}
+		return false, fmt.Errorf("failed to fetch block status: %w", err)
 	}
-
-	return c.JSON(http.StatusOK, echo.Map{"status": record.Status})
+	return blockStatus.Block, nil
 }
 
 // // Handler to clear fraudulent user data

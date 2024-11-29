@@ -219,6 +219,7 @@ func SaveRechargeHistory(c echo.Context) error {
 		PaymentType:   request.PaymentType,
 		DateTime:      formattedDateTime,
 		Status:        request.Status,
+		CreatedAt:     time.Now(),
 	}
 	_, err = rechargeHistoryCol.InsertOne(ctx, rechargeHistory)
 	if err != nil {

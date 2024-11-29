@@ -1,6 +1,8 @@
 package models
 
 import (
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -14,6 +16,8 @@ type RechargeHistory struct {
 	PaymentType   string             `bson:"payment_type" json:"payment_type"`
 	DateTime      string             `bson:"date_time" json:"date_time"`
 	Status        string             `bson:"status" json:"status"`
+	CreatedAt     time.Time          `bson:"createdAt,omitempty" json:"createdAt"`
+	UpdatedAt     time.Time          `bson:"updatedAt,omitempty" json:"updatedAt"`
 }
 
 // TransactionHistory represents the transaction history document structure

@@ -383,11 +383,11 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 	rechargeDetail.Status = "ok"
-	err = services.TrxRechargeTeleBot(rechargeDetail)
-	if err != nil {
-		logs.Logger.Error(err)
-		logs.Logger.Info("recharget trx send failed")
-	}
+	// err = services.TrxRechargeTeleBot(rechargeDetail)
+	// if err != nil {
+	// 	logs.Logger.Error(err)
+	// 	logs.Logger.Info("recharget trx send failed")
+	// }
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
 		"ipDetails": ipDetails,

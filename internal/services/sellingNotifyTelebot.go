@@ -184,6 +184,12 @@ func FetchSellingUpdate(ctx context.Context, db *mongo.Database) (SellingUpdateD
 
 	// 3. Fetch Recharge Details
 	rechargeCollection := models.InitializeRechargeHistoryCollection(db)
+
+	// Get the current date
+	startOfDay := time.Now().Truncate(24 * time.Hour)            // Start of the day (12:00am)
+	endOfDay := startOfDay.Add(24 * time.Hour).Add(-time.Second) // End of the day (11:59:59pm)
+
+	// Define the pipeline for recharges within the day
 	rechargePipeline := mongo.Pipeline{
 		bson.D{{Key: "$addFields", Value: bson.D{
 			{Key: "amount", Value: bson.D{{Key: "$toDouble", Value: "$amount"}}}, // Convert amount to double
@@ -191,6 +197,10 @@ func FetchSellingUpdate(ctx context.Context, db *mongo.Database) (SellingUpdateD
 		bson.D{{Key: "$match", Value: bson.D{
 			{Key: "status", Value: "Received"},                       // Only successful recharges
 			{Key: "amount", Value: bson.D{{Key: "$ne", Value: nil}}}, // Exclude null amounts
+			{Key: "createdAt", Value: bson.D{
+				{Key: "$gte", Value: startOfDay},
+				{Key: "$lte", Value: endOfDay},
+			}}, // Match the specific day
 		}}},
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: "$payment_type"},                                 // Group by payment type
@@ -198,13 +208,14 @@ func FetchSellingUpdate(ctx context.Context, db *mongo.Database) (SellingUpdateD
 			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},               // Count occurrences per type
 		}}},
 	}
+
 	cursor, err = rechargeCollection.Aggregate(ctx, rechargePipeline)
 	if err != nil {
 		return details, fmt.Errorf("failed to aggregate recharge data: %w", err)
 	}
 	defer cursor.Close(ctx)
 
-	var totalRechargeAmount float64
+	var dailyTotalRechargeAmount float64
 	for cursor.Next(ctx) {
 		var result struct {
 			ID          string  `bson:"_id"`
@@ -216,7 +227,7 @@ func FetchSellingUpdate(ctx context.Context, db *mongo.Database) (SellingUpdateD
 		}
 
 		// Sum up the total recharge amount
-		totalRechargeAmount += result.TotalAmount
+		dailyTotalRechargeAmount += result.TotalAmount
 
 		// Populate counts based on payment type
 		switch result.ID {
@@ -226,6 +237,42 @@ func FetchSellingUpdate(ctx context.Context, db *mongo.Database) (SellingUpdateD
 			details.RechargeDetails.Upi = float64(result.Count)
 		}
 	}
-	details.RechargeDetails.Total = totalRechargeAmount
+
+	// 4. Fetch Website Balance (Total Recharge Amount Irrespective of Time)
+	totalRechargePipeline := mongo.Pipeline{
+		bson.D{{Key: "$addFields", Value: bson.D{
+			{Key: "amount", Value: bson.D{{Key: "$toDouble", Value: "$amount"}}}, // Convert amount to double
+		}}},
+		bson.D{{Key: "$match", Value: bson.D{
+			{Key: "status", Value: "Received"},                       // Only successful recharges
+			{Key: "amount", Value: bson.D{{Key: "$ne", Value: nil}}}, // Exclude null amounts
+		}}},
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: nil}, // Group all records
+			{Key: "totalAmount", Value: bson.D{{Key: "$sum", Value: "$amount"}}}, // Sum all amounts
+		}}},
+	}
+
+	cursor, err = rechargeCollection.Aggregate(ctx, totalRechargePipeline)
+	if err != nil {
+		return details, fmt.Errorf("failed to aggregate total recharge data: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	if cursor.Next(ctx) {
+		var totalResult struct {
+			TotalAmount float64 `bson:"totalAmount"`
+		}
+		if err := cursor.Decode(&totalResult); err != nil {
+			return details, fmt.Errorf("failed to decode total recharge data: %w", err)
+		}
+
+		// Set Website Balance
+		details.WebsiteBalance = totalResult.TotalAmount
+	}
+
+	// Set the daily total recharge amount
+	details.RechargeDetails.Total = dailyTotalRechargeAmount
+
 	return details, nil
 }

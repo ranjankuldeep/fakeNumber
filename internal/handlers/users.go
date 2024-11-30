@@ -23,6 +23,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"github.com/ranjankuldeep/fakeNumber/internal/services"
+	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -226,17 +227,13 @@ func sendOTPByEmail(email, otp, text, subject string) error {
 	message.SetHeader("To", email)
 	message.SetHeader("Subject", subject)
 	message.SetBody("text/plain", text+": "+otp)
-
-	// Create a new SMTP dialer
 	dialer := gomail.NewDialer(smtpHost, smtpPort, smtpUser, smtpPass)
 
-	// Send the email
 	log.Printf("INFO: Sending email to %s with subject: %s\n", email, subject)
 	if err := dialer.DialAndSend(message); err != nil {
 		log.Printf("ERROR: Failed to send email: %v\n", err)
 		return err
 	}
-
 	log.Println("INFO: Email sent successfully")
 	return nil
 }
@@ -1359,5 +1356,51 @@ func VerifyOTP(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{
 		"status":  "VERIFIED",
 		"message": "User registered successfully",
+	})
+}
+
+type EmailRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+func ResendOTP(c echo.Context) error {
+	var req EmailRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+	}
+	if req.Email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Email is required"})
+	}
+
+	email := req.Email
+	// var existUser models.User
+	// userCollection := models.InitializeUserCollection(db)
+	// err := userCollection.FindOne(context.TODO(), bson.M{"email": email}).Decode(&existUser)
+	// if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
+	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "user not found"})
+	// }
+	// if err != nil {
+	// 	logs.Logger.Error(err)
+	// 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "Unable to Fetch user details"})
+	// }
+
+	newOtp := utils.GenerateOTP()
+	otpText := "Your new OTP for registration is"
+	subText := "OTP verification"
+	if err := sendOTPByEmail(email, newOtp, otpText, subText); err != nil {
+		log.Printf("Error sending OTP: %v\n", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to send OTP"})
+	}
+
+	err := storeOTP(email, newOtp)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to send OTP"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"status":  "PENDING",
+		"message": "New OTP sent successfully.",
+		"email":   email,
 	})
 }

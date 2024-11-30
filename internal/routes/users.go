@@ -9,7 +9,7 @@ import (
 func RegisterUserRoutes(e *echo.Echo) {
 	e.POST("/api/signup", handlers.SignUp)
 	e.POST("/api/verify-otp", handlers.VerifyOTP)
-	// e.POST("/api/resend-otp", handlers.ResendOTP)
+	e.POST("/api/resend-otp", handlers.ResendOTP)
 	e.POST("/api/login", handlers.Login)
 	e.POST("/api/forgot-password", handlers.ForgotPassword)
 	e.POST("/api/resend-forgot-otp", handlers.ResendForgotOTP)

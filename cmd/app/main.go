@@ -114,5 +114,6 @@ func main() {
 		}
 	}()
 	go StartSellingTicker(db)
+	go StartUpdateServerDataTicker(db)
 	e.Logger.Fatal(e.Start(":8000"))
 }

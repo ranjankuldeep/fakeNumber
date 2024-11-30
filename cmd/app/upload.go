@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -97,4 +98,23 @@ func UpdateServerData(db *mongo.Database, ctx context.Context) error {
 		return fmt.Errorf("failed to insert data in batch: %w", err)
 	}
 	return nil
+}
+
+func StartUpdateServerDataTicker(db *mongo.Database) {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	go func() {
+		if err := UpdateServerData(db, context.TODO()); err != nil {
+			log.Printf("Error in UpdateServerData: %v", err)
+		}
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := UpdateServerData(db, context.TODO()); err != nil {
+				log.Printf("Error in UpdateServerData: %v", err)
+			}
+		}
+	}
 }

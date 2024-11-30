@@ -187,7 +187,6 @@ type ServerDetail struct {
 func GetServiceData(c echo.Context) error {
 	userId := c.QueryParam("userId")
 	db := c.Get("db").(*mongo.Database)
-
 	serverCollection := models.InitializeServerCollection(db)
 	serviceCollection := models.InitializeServerListCollection(db)
 	serviceDiscountCollection := models.InitializeServiceDiscountCollection(db)

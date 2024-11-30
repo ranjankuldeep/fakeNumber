@@ -34,6 +34,7 @@ func fetchAllUsers(ctx context.Context, db *mongo.Database) ([]models.User, erro
 func fetchRechargeSum(ctx context.Context, rechargeHistoryCollection *mongo.Collection, userID string) (float64, error) {
 	cursor, err := rechargeHistoryCollection.Find(ctx, bson.M{"userId": userID})
 	if err != nil {
+		logs.Logger.Error(err)
 		return 0, fmt.Errorf("failed to query recharge histories for user %s: %w", userID, err)
 	}
 	defer cursor.Close(ctx)

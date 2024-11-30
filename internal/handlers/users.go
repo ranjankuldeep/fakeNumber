@@ -265,31 +265,23 @@ func storeOTP(email string, otp string) error {
 	// Hash the OTP
 	hashedOTP := hashOTP(otp)
 
-	// Check if an OTP already exists for this email
+	// Filter for the email
 	filter := bson.M{"email": email}
-	var existingOTP OTP
-	err = otpCollection.FindOne(context.Background(), filter).Decode(&existingOTP)
-	if err == nil {
-		// OTP already exists, return an error
-		log.Println("ERROR: OTP already exists for email:", email)
-		return errors.New("OTP already sent, please resend to get a new OTP")
-	} else if err != mongo.ErrNoDocuments {
-		// Some other error occurred
-		log.Println("ERROR: Failed to check existing OTP:", err)
-		return err
+
+	// New OTP document to insert or update
+	update := bson.M{
+		"$set": bson.M{
+			"email":     email,
+			"hashedOTP": hashedOTP,
+			"expiresAt": time.Now().Add(5 * time.Minute), // Adjust expiration time as needed
+		},
 	}
 
-	// Create a new OTP document
-	newOTP := OTP{
-		Email:     email,
-		HashedOTP: hashedOTP,
-		ExpiresAt: time.Now().Add(5 * time.Minute), // Adjust expiration time as needed
-	}
-
-	// Insert the new OTP document
-	_, err = otpCollection.InsertOne(context.Background(), newOTP)
+	// Upsert the document: update if it exists, insert if it doesn't
+	opts := options.Update().SetUpsert(true)
+	_, err = otpCollection.UpdateOne(context.Background(), filter, update, opts)
 	if err != nil {
-		log.Println("ERROR: Failed to insert new OTP:", err)
+		log.Println("ERROR: Failed to upsert OTP:", err)
 		return err
 	}
 
@@ -304,7 +296,7 @@ func storeOTP(email string, otp string) error {
 		}
 	}()
 
-	log.Printf("INFO: OTP successfully stored for email: %s", email)
+	log.Printf("INFO: OTP successfully stored or updated for email: %s", email)
 	return nil
 }
 

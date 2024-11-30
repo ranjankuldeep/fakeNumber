@@ -781,10 +781,8 @@ func HandleCheckOTP(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Server not found"})
 	}
 	fmt.Println("DEBUG: Retrieved server data:", serverData)
-
-	// First API Call: Fetch OTP data
 	encodedOtp := url.QueryEscape(otp)
-	url := fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getOtp&sms=Dear user, your OTP is %s", serverData.APIKey, encodedOtp)
+	url := fmt.Sprintf("https://fastsms.su/stubs/handler_api.php?api_key=%s&action=getOtp&sms=%s", serverData.APIKey, encodedOtp)
 	fmt.Println("DEBUG: Fetching OTP data from URL:", url)
 
 	resp, err := http.Get(url)
@@ -799,20 +797,13 @@ func HandleCheckOTP(c echo.Context) error {
 		fmt.Println("ERROR: Failed to decode OTP response:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid OTP response format"})
 	}
-	fmt.Println("DEBUG: OTP service response:", otpData)
-
-	// Handle empty OTP data
-	// Handle empty OTP data
+	logs.Logger.Info(otpData)
 	if len(otpData) == 0 {
 		fmt.Println("DEBUG: No OTP data found")
 		return c.JSON(http.StatusOK, echo.Map{"results": []string{}})
 	}
-
-	// Extract the first element from the OTP data
 	otpKey := otpData[0]
-	fmt.Println("DEBUG: Extracted OTP key:", otpKey)
-
-	// Second API Call: Fetch services data
+	otpkeys := strings.Split(otpKey, "|")
 	servicesURL := "https://fastsms.su/stubs/handler_api.php?api_key=d91be54bb695297dd517edfdf7da5add&action=getServices"
 	fmt.Println("DEBUG: Fetching services data from URL:", servicesURL)
 
@@ -828,17 +819,16 @@ func HandleCheckOTP(c echo.Context) error {
 		fmt.Println("ERROR: Failed to decode services response:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Invalid services response format"})
 	}
-
-	// Search for the OTP key in the services response
-	serviceName, found := servicesData[otpKey]
-	if !found {
-
-		return c.JSON(http.StatusOK, echo.Map{"results": []string{}})
+	ServicesNames := []string{}
+	for _, service_name := range otpkeys {
+		if serviceName, exists := servicesData[service_name]; exists {
+			ServicesNames = append(ServicesNames, serviceName)
+		} else {
+			fmt.Println("DEBUG: Key not found in servicesData:", service_name)
+		}
 	}
-	fmt.Println("DEBUG: Found service name for OTP key:", serviceName)
-
-	// Return the service name in the results array
-	return c.JSON(http.StatusOK, echo.Map{"results": []string{serviceName}})
+	logs.Logger.Info(ServicesNames)
+	return c.JSON(http.StatusOK, ServicesNames)
 }
 
 func HandleNumberCancel(c echo.Context) error {
@@ -846,9 +836,6 @@ func HandleNumberCancel(c echo.Context) error {
 	id := c.QueryParam("id")
 	apiKey := c.QueryParam("api_key")
 	server := c.QueryParam("server")
-
-	fmt.Println("DEBUG: Received request with ID:", id, "API Key:", apiKey, "Server:", server)
-
 	if id == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
 	}
@@ -906,19 +893,16 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "USER_NOT_FOUND"})
 	}
 
-	// case 1: if request comes with in 2 minutes
 	timeDifference := time.Now().Sub(existingOrder.OrderTime)
 	if timeDifference < 2*time.Minute {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "wait 2 mints before cancel"})
 	}
 
-	// case 2: if server in maintainance then send this response
 	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "under maintenance"})
 	}
 
-	// case 3: if otp already arrived
 	var transactionData models.TransactionHistory
 	transactionCollection := models.InitializeTransactionHistoryCollection(db)
 

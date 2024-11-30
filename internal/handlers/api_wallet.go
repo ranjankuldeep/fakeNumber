@@ -167,7 +167,6 @@ func CreateOrUpdateAPIKeyHandler(c echo.Context) error {
 func GetUpiQR(c echo.Context) error {
 	amount := c.QueryParam("amt")
 	if amount == "" {
-		logs.Logger.Info(amount)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty amount"})
 	}
 	db, ok := c.Get("db").(*mongo.Database)

@@ -727,7 +727,6 @@ func FetchBalance(server string, apiURL string, headers map[string]string) (Bala
 		return Balance{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 	responseData := string(body)
-	logs.Logger.Info(responseData)
 	if strings.TrimSpace(responseData) == "" {
 		return Balance{}, errors.New("RECEIVED_EMPTY_RESPONSE_FROM_THIRD_PARTY_SERVER")
 	}

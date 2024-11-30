@@ -103,6 +103,7 @@ func BlockFraudClear(c echo.Context) error {
 	walletCol := models.InitializeApiWalletuserCollection(db)
 	rechargeHistoryCol := models.InitializeRechargeHistoryCollection(db)
 	transactionHistoryCol := models.InitializeTransactionHistoryCollection(db)
+	userCollection := models.InitializeUserCollection(db)
 
 	userId := c.QueryParam("userId")
 	if userId == "" {
@@ -139,6 +140,10 @@ func BlockFraudClear(c echo.Context) error {
 
 	// Delete the user from the wallet collection
 	_, err = walletCol.DeleteOne(ctx, bson.M{"userId": objID})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error deleting walletUser from the collection"})
+	}
+	_, err = userCollection.DeleteOne(ctx, bson.M{"_id": objID})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error deleting user from the collection"})
 	}

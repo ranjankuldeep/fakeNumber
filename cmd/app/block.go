@@ -31,14 +31,13 @@ func fetchAllUsers(ctx context.Context, db *mongo.Database) ([]models.User, erro
 	return users, nil
 }
 
-func fetchRechargeSum(ctx context.Context, rechargeHistoryCollection *mongo.Collection, userID string) (float64, error) {
+func fetchRechargeSum(ctx context.Context, userID string, db *mongo.Database) (float64, error) {
+	rechargeHistoryCollection := models.InitializeRechargeHistoryCollection(db)
 	cursor, err := rechargeHistoryCollection.Find(ctx, bson.M{"userId": userID})
 	if err != nil {
-		logs.Logger.Error(err)
 		return 0, fmt.Errorf("failed to query recharge histories for user %s: %w", userID, err)
 	}
 	defer cursor.Close(ctx)
-
 	totalRecharge := 0.0
 	for cursor.Next(ctx) {
 		var recharge models.RechargeHistory
@@ -46,6 +45,7 @@ func fetchRechargeSum(ctx context.Context, rechargeHistoryCollection *mongo.Coll
 			log.Printf("Failed to decode recharge history: %v", err)
 			continue
 		}
+
 		amount, err := strconv.ParseFloat(recharge.Amount, 64)
 		if err != nil {
 			log.Printf("Invalid recharge amount for user %s: %v", userID, err)
@@ -53,8 +53,12 @@ func fetchRechargeSum(ctx context.Context, rechargeHistoryCollection *mongo.Coll
 		}
 		totalRecharge += amount
 	}
+	if err := cursor.Err(); err != nil {
+		return 0, fmt.Errorf("error iterating recharge history cursor: %w", err)
+	}
 	return totalRecharge, nil
 }
+
 func fetchSuccessTransactionSum(ctx context.Context, transactionHistoryCollection *mongo.Collection, userID string) (float64, error) {
 	cursor, err := transactionHistoryCollection.Find(ctx, bson.M{"userId": userID, "status": "SUCCESS"})
 	if err != nil {
@@ -115,7 +119,6 @@ func fetchWalletBalance(ctx context.Context, apiWalletCollection *mongo.Collecti
 
 func CheckAndBlockUsers(db *mongo.Database) {
 	userCollection := models.InitializeUserCollection(db)
-	rechargeHistoryCollection := models.InitializeRechargeHistoryCollection(db)
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
 
@@ -139,7 +142,7 @@ func CheckAndBlockUsers(db *mongo.Database) {
 			continue
 		}
 
-		totalRecharge, err := fetchRechargeSum(ctx, rechargeHistoryCollection, user.ID.Hex())
+		totalRecharge, err := fetchRechargeSum(ctx, user.ID.Hex(), db)
 		if err != nil {
 			log.Printf("Error fetching recharge sum for user %s: %v", user.ID.Hex(), err)
 			continue

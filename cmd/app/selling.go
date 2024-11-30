@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -247,4 +248,27 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 		logs.Logger.Errorf("Error sending selling message")
 	}
 	return details, nil
+}
+
+// startTicker handles the periodic execution of the SendSellingUpdate function
+func StartSellingTicker(db *mongo.Database) {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+
+	go func() {
+		_, err := SendSellingUpdate(db)
+		if err != nil {
+			log.Printf("Error in SendSellingUpdate: %v", err)
+		}
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			_, err := SendSellingUpdate(db)
+			if err != nil {
+				log.Printf("Error in SendSellingUpdate: %v", err)
+			}
+		}
+	}
 }

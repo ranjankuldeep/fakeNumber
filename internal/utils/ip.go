@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -43,6 +44,7 @@ func ExtractIpDetails(c echo.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get ip address")
 	}
+	logs.Logger.Info(ip)
 
 	apiURL := fmt.Sprintf("http://ip-api.com/json/%s", ip)
 	resp, err := http.Get(apiURL)

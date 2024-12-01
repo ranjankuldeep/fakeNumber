@@ -911,8 +911,13 @@ func HandleNumberCancel(c echo.Context) error {
 	filter := bson.M{
 		"userId": apiWalletUser.UserID.Hex(),
 		"id":     id,
+		"server": server,
 	}
+
 	err = transactionCollection.FindOne(ctx, filter).Decode(&transactionData)
+	if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid server"})
+	}
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_FETCH_TRANSACTION_HISTORY_DATA"})

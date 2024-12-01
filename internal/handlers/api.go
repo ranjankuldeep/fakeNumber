@@ -135,7 +135,7 @@ func GetNumberHandlerApi(c echo.Context) error {
 		ID:            primitive.NewObjectID(),
 		Number:        numData.Number,
 		Status:        "PENDING",
-		DateTime:      time.Now().Format("2006-01-02T15:04:05"),
+		DateTime:      time.Now().In(time.FixedZone("IST", 5*3600+30*60)).Format("2006-01-02T15:04:05"),
 	}
 	_, err = transactionHistoryCollection.InsertOne(ctx, transaction)
 	if err != nil {

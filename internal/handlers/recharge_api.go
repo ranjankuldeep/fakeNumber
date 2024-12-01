@@ -297,6 +297,9 @@ func RechargeTrxApi(c echo.Context) error {
 	err = rechargeWalletCollection.FindOne(context.TODO(), bson.M{"recharge_type": "trx"}).Decode(&adminWallet)
 	if err != nil {
 		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "",
+		})
 	}
 
 	var user models.User

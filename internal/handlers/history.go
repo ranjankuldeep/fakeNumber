@@ -209,27 +209,16 @@ func TransactionCount(c echo.Context) error {
 	pendingCount := 0   // PENDING
 
 	for _, transactions := range transactionsById {
-		hasFinished := false
-		hasCancelled := false
-		hasOtp := false
 		for _, txn := range transactions {
 			if txn.Status == "SUCCESS" {
-				hasFinished = true
+				successCount++
 			}
 			if txn.Status == "CANCELLED" {
-				hasCancelled = true
+				cancelledCount++
 			}
-			if len(txn.OTP) >= 1 && txn.Status == "PENDING" {
-				hasOtp = true
+			if txn.Status == "PENDING" {
+				pendingCount++
 			}
-		}
-
-		if hasFinished && hasOtp {
-			successCount++
-		} else if hasFinished && hasCancelled {
-			cancelledCount++
-		} else if hasFinished && !hasCancelled && !hasOtp {
-			pendingCount++
 		}
 	}
 

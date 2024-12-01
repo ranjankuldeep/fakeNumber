@@ -272,6 +272,7 @@ func storeOTP(email string, otp string) error {
 	update := bson.M{
 		"$set": bson.M{
 			"email":     email,
+			"otp":       otp,
 			"hashedOTP": hashedOTP,
 			"expiresAt": time.Now().Add(5 * time.Minute), // Adjust expiration time as needed
 		},

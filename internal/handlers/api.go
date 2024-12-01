@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -492,4 +493,107 @@ func CancelNumberHandlerApi(c echo.Context) error {
 	// }
 	// services.NumberCancelDetails(userData.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
+}
+
+func GetServiceDataApi(c echo.Context) error {
+	apiKey := c.QueryParam("api_key")
+	if apiKey == "" {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	db := c.Get("db").(*mongo.Database)
+	serverCollection := models.InitializeServerCollection(db)
+	serviceCollection := models.InitializeServerListCollection(db)
+	serviceDiscountCollection := models.InitializeServiceDiscountCollection(db)
+	serverDiscountCollection := models.InitializeServerDiscountCollection(db)
+	userDiscountCollection := models.InitializeUserDiscountCollection(db)
+	var maintenanceStatus struct {
+		Maintenance bool `bson:"maintainance"`
+	}
+	var apiWalletUser models.ApiWalletUser
+	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
+	err := apiWalletCollection.FindOne(context.TODO(), bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "User not found"})
+	}
+
+	err = serverCollection.FindOne(context.Background(), bson.M{"server": 0}).Decode(&maintenanceStatus)
+	if err == nil && maintenanceStatus.Maintenance {
+		log.Println(err)
+		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
+	}
+	serversInMaintenance, err := serverCollection.Find(context.Background(), bson.M{"maintainance": true})
+	if err != nil {
+		log.Println(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	defer serversInMaintenance.Close(context.Background())
+	var maintenanceServerNumbers []int
+	for serversInMaintenance.Next(context.Background()) {
+		var server struct {
+			ServerNumber int `bson:"server"`
+		}
+		if err := serversInMaintenance.Decode(&server); err == nil {
+			log.Println(err)
+			maintenanceServerNumbers = append(maintenanceServerNumbers, server.ServerNumber)
+		}
+	}
+	cursor, err := serviceCollection.Find(context.Background(), bson.D{})
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	defer cursor.Close(context.Background())
+
+	var services []models.ServerList
+	for cursor.Next(context.Background()) {
+		var service models.ServerList
+		if err := cursor.Decode(&service); err != nil {
+			logs.Logger.Error(err)
+		}
+		services = append(services, service)
+	}
+
+	serviceDiscounts, serverDiscounts, userDiscounts, err := loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDiscountCollection, apiWalletUser.UserID.Hex())
+	if err != nil {
+		log.Println(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
+	}
+	filteredData := []ServiceResponse{}
+	for _, service := range services {
+		serverDetails := []ServerDetail{}
+		for _, server := range service.Servers {
+			if contains(maintenanceServerNumbers, server.Server) {
+				continue
+			}
+			// Calculate discounts
+			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.Name, server.Server, apiWalletUser.UserID.Hex())
+			price, _ := strconv.ParseFloat(server.Price, 64)
+			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
+			var otpType string
+			switch server.Otp {
+			case "Multiple Otp":
+				otpType = "multiple"
+			case "Single Otp & Fresh Number", "Single Otp":
+				otpType = "single"
+			}
+
+			serverDetails = append(serverDetails, ServerDetail{
+				Server: strconv.Itoa(server.Server),
+				Price:  adjustedPrice,
+				Code:   server.Code,
+				Otp:    otpType,
+			})
+		}
+		sort.Slice(serverDetails, func(i, j int) bool {
+			return serverDetails[i].Server < serverDetails[j].Server
+		})
+		filteredData = append(filteredData, ServiceResponse{
+			Name:    service.Name,
+			Servers: serverDetails,
+		})
+	}
+	sort.Slice(filteredData, func(i, j int) bool {
+		return filteredData[i].Name < filteredData[j].Name
+	})
+	return c.JSON(http.StatusOK, filteredData)
 }

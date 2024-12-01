@@ -204,9 +204,9 @@ func TransactionCount(c echo.Context) error {
 		transactionsById[transaction.ID.String()] = append(transactionsById[transaction.ID.String()], transaction)
 	}
 
-	successCount := 0   // SUCCESS
-	cancelledCount := 0 // CANCELLED
-	pendingCount := 0   // PENDING
+	successCount := 0
+	cancelledCount := 0
+	pendingCount := 0
 
 	for _, transactions := range transactionsById {
 		for _, txn := range transactions {

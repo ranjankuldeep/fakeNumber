@@ -5,11 +5,8 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/handlers"
 )
 
-// RegisterGetDataRoutes sets up routes for data retrieval operations.
 func RegisterGetDataRoutes(e *echo.Echo) {
 	dataGroup := e.Group("/api/")
-
-	// Define routes
 	dataGroup.GET("get-service-data", handlers.GetServiceData)
 	dataGroup.GET("get-service", handlers.GetUserServiceData)
 	dataGroup.GET("get-service-data-admin", handlers.GetServiceDataAdmin)

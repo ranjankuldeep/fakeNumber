@@ -193,26 +193,20 @@ func GetServiceData(c echo.Context) error {
 	serverDiscountCollection := models.InitializeServerDiscountCollection(db)
 	userDiscountCollection := models.InitializeUserDiscountCollection(db)
 
-	// Check site maintenance status
 	var maintenanceStatus struct {
 		Maintenance bool `bson:"maintainance"`
 	}
-
 	err := serverCollection.FindOne(context.Background(), bson.M{"server": 0}).Decode(&maintenanceStatus)
 	if err == nil && maintenanceStatus.Maintenance {
 		log.Println(err)
 		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
 	}
-
-	// Fetch servers in maintenance
 	serversInMaintenance, err := serverCollection.Find(context.Background(), bson.M{"maintainance": true})
 	if err != nil {
 		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 	defer serversInMaintenance.Close(context.Background())
-
-	// Extract server numbers in maintenance
 	var maintenanceServerNumbers []int
 	for serversInMaintenance.Next(context.Background()) {
 		var server struct {
@@ -223,8 +217,6 @@ func GetServiceData(c echo.Context) error {
 			maintenanceServerNumbers = append(maintenanceServerNumbers, server.ServerNumber)
 		}
 	}
-
-	// Fetch service data
 	cursor, err := serviceCollection.Find(context.Background(), bson.D{})
 	if err != nil {
 		logs.Logger.Error(err)
@@ -240,15 +232,12 @@ func GetServiceData(c echo.Context) error {
 		}
 		services = append(services, service)
 	}
-
-	// Load discounts
 	serviceDiscounts, serverDiscounts, userDiscounts, err := loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDiscountCollection, userId)
 	if err != nil {
 		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 
-	// Process and filter data
 	filteredData := []ServiceResponse{}
 	for _, service := range services {
 		serverDetails := []ServerDetail{}
@@ -256,10 +245,10 @@ func GetServiceData(c echo.Context) error {
 			if contains(maintenanceServerNumbers, server.Server) {
 				continue
 			}
-			// Calculate discounts
+
 			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.Name, server.Server, userId)
 			price, _ := strconv.ParseFloat(server.Price, 64)
-			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64) // final price
+			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
 
 			serverDetails = append(serverDetails, ServerDetail{
 				Server: strconv.Itoa(server.Server),
@@ -268,8 +257,6 @@ func GetServiceData(c echo.Context) error {
 				Otp:    server.Otp,
 			})
 		}
-
-		// Sort by server number and add to filtered data
 		sort.Slice(serverDetails, func(i, j int) bool {
 			return serverDetails[i].Server < serverDetails[j].Server
 		})
@@ -278,12 +265,9 @@ func GetServiceData(c echo.Context) error {
 			Servers: serverDetails,
 		})
 	}
-
-	// Sort the data by service name
 	sort.Slice(filteredData, func(i, j int) bool {
 		return filteredData[i].Name < filteredData[j].Name
 	})
-
 	return c.JSON(http.StatusOK, filteredData)
 }
 

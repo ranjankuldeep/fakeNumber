@@ -167,11 +167,13 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch api wallet user"})
 	}
 
-	// Fetch IP details
-	ipDetails, err := utils.GetIpDetails()
+	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	err = utils.StoreIp(db, userId, ipDetail)
+	if err != nil {
+		logs.Logger.Error(err)
 	}
 
 	rechargeDetail := services.UpiRechargeDetails{
@@ -180,7 +182,7 @@ func RechargeUpiApi(c echo.Context) error {
 		TrnID:   transactionId,
 		Amount:  fmt.Sprintf("%d", upiData.Amount),
 		Balance: fmt.Sprintf("%0.2f", apiWalletUser.Balance),
-		IP:      ipDetails,
+		IP:      ipDetail,
 	}
 	err = services.UpiRechargeTeleBot(rechargeDetail)
 	if err != nil {
@@ -190,7 +192,7 @@ func RechargeUpiApi(c echo.Context) error {
 	// Respond to client
 	return c.JSON(http.StatusOK, map[string]string{
 		"message":   fmt.Sprintf("%d₹ Added Successfully!", upiData.Amount),
-		"ipDetails": ipDetails,
+		"ipDetails": ipDetail,
 	})
 }
 
@@ -336,12 +338,13 @@ func RechargeTrxApi(c echo.Context) error {
 	sentUrl := fmt.Sprintf("https://own5k.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
 	newClient := &http.Client{Timeout: 10 * time.Second}
 
-	ipDetails, err := utils.GetIpDetails()
+	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {
-		log.Println("ERROR: Failed to fetch IP details:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to fetch IP details",
-		})
+		logs.Logger.Error(err)
+	}
+	err = utils.StoreIp(db, userId, ipDetail)
+	if err != nil {
+		logs.Logger.Error(err)
 	}
 	rechargeDetail := services.TrxRechargeDetails{
 		Email:        user.Email,
@@ -354,7 +357,7 @@ func RechargeTrxApi(c echo.Context) error {
 		SendTo:       toAddress,
 		Status:       "",
 		Hash:         hash,
-		IP:           ipDetails,
+		IP:           ipDetail,
 	}
 
 	// Make the GET request
@@ -400,7 +403,7 @@ func RechargeTrxApi(c echo.Context) error {
 		}
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
-			"ipDetails": ipDetails,
+			"ipDetails": ipDetail,
 		})
 	}
 	rechargeDetail.Status = "ok"
@@ -411,7 +414,7 @@ func RechargeTrxApi(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
-		"ipDetails": ipDetails,
+		"ipDetails": ipDetail,
 	})
 }
 

@@ -9,7 +9,6 @@ import (
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"github.com/ranjankuldeep/fakeNumber/internal/services"
-	"github.com/ranjankuldeep/fakeNumber/internal/utils"
 	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -187,9 +186,12 @@ func CheckAndBlockUsers(db *mongo.Database) {
 				log.Printf("Failed to block user %s: %v", user.ID.Hex(), err)
 			} else {
 				log.Printf("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
-				ipDetails, err := utils.GetIpDetails()
+				var ip models.Ip
+				ipCollection := models.InitializeIpCollection(db)
+				err := ipCollection.FindOne(ctx, bson.M{"userId": user.ID}).Decode(&ip)
 				if err != nil {
 					logs.Logger.Error(err)
+					return
 				}
 
 				blockDetails := services.BlockUserDetails{
@@ -201,7 +203,7 @@ func CheckAndBlockUsers(db *mongo.Database) {
 					ToBeBalance:    fmt.Sprintf("%0.2f", totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice)),
 					FraudAmount:    fmt.Sprintf("%0.2f", walletBalance-(totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice))),
 					Reason:         fmt.Sprintf("Due to Fraud"),
-					IpDetails:      ipDetails,
+					IpDetails:      ip.Details,
 				}
 				err = services.UserBlockDetails(blockDetails)
 				if err != nil {

@@ -55,26 +55,17 @@ func main() {
 	e := echo.New()
 
 	uri := "mongodb+srv://test2:amardeep885@cluster0.blfflhg.mongodb.net/Express-Backend?retryWrites=true&w=majority"
-
-	// CORS middleware to allow only http://localhost:5173
-	// Configure CORS to allow requests from http://localhost:5173 with credentials
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174", "https://thriving-kangaroo-d65ee0.netlify.app", "https://gregarious-cascaron-4fbe0f.netlify.app"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true, // Enable credentials
 	}))
-
-	// Connect to the MongoDB client
 	client, err := database.ConnectDB(uri)
 	if err != nil {
 		log.Fatal("Error initializing MongoDB connection:", err)
 	}
-
-	// Select the specific database
 	db := client.Database("Express-Backend")
-
-	// Run periodically token update of server9
 	go func() {
 		for {
 			err := lib.UpdateServerToken(db)

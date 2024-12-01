@@ -318,12 +318,15 @@ func GetOTPHandlerApi(c echo.Context) error {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			}
 
-			ipDetails, err := utils.GetIpDetails()
+			ipDetail, err := utils.ExtractIpDetails(c)
 			if err != nil {
 				logs.Logger.Error(err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			}
-			formattedIpDetails := removeHTMLTags(ipDetails)
+			err = utils.StoreIp(db, existingEntry.UserID, ipDetail)
+			if err != nil {
+				logs.Logger.Error(err)
+			}
+
 			otpDetail := services.OTPDetails{
 				Email:       userData.Email,
 				ServiceName: existingEntry.Service,
@@ -331,7 +334,7 @@ func GetOTPHandlerApi(c echo.Context) error {
 				Server:      existingEntry.Server,
 				Number:      existingEntry.Number,
 				OTP:         validOtp,
-				Ip:          formattedIpDetails,
+				Ip:          ipDetail,
 			}
 
 			err = services.OtpGetDetails(otpDetail)

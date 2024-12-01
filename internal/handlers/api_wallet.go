@@ -256,7 +256,11 @@ func UpdateRechargeHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch user"})
 	}
 
-	ipDetail, err := utils.GetIpDetails()
+	ipDetail, err := utils.ExtractIpDetails(c)
+	if err != nil {
+		logs.Logger.Error(err)
+	}
+	err = utils.StoreIp(db, requestBody.UserID, ipDetail)
 	if err != nil {
 		logs.Logger.Error(err)
 	}

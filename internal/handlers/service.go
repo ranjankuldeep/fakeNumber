@@ -225,11 +225,16 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if numData.Id == "" || numData.Number == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 	}
-	ipDetails, err := utils.GetIpDetails()
+
+	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+	err = utils.StoreIp(db, apiWalletUser.UserID.Hex(), ipDetail)
+	if err != nil {
+		logs.Logger.Error(err)
+	}
+
 	numberDetails := services.NumberDetails{
 		Email:       user.Email,
 		ServiceName: serviceName,
@@ -238,7 +243,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		Server:      server,
 		Balance:     fmt.Sprintf("%.2f", roundedBalance),
 		Number:      numData.Number,
-		Ip:          ipDetails,
+		Ip:          ipDetail,
 	}
 	err = services.NumberGetDetails(numberDetails)
 	if err != nil {
@@ -552,11 +557,15 @@ func HandleGetOtp(c echo.Context) error {
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			}
 
-			ipDetails, err := utils.GetIpDetails()
+			ipDetail, err := utils.ExtractIpDetails(c)
 			if err != nil {
 				logs.Logger.Error(err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			}
+			err = utils.StoreIp(db, existingEntry.UserID, ipDetail)
+			if err != nil {
+				logs.Logger.Error(err)
+			}
+
 			otpDetail := services.OTPDetails{
 				Email:       userData.Email,
 				ServiceName: transaction.Service,
@@ -565,7 +574,7 @@ func HandleGetOtp(c echo.Context) error {
 				Server:      transaction.Server,
 				Number:      transaction.Number,
 				OTP:         validOtp,
-				Ip:          ipDetails,
+				Ip:          ipDetail,
 			}
 
 			err = services.OtpGetDetails(otpDetail)
@@ -984,9 +993,13 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	ipDetails, err := utils.GetIpDetails()
+	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ERROR_FETCHING_IP_DETAILS"})
+		logs.Logger.Error(err)
+	}
+	err = utils.StoreIp(db, apiWalletUser.UserID.Hex(), ipDetail)
+	if err != nil {
+		logs.Logger.Error(err)
 	}
 	cancelDetail := services.CancelDetails{
 		Email:       user.Email,
@@ -996,7 +1009,7 @@ func HandleNumberCancel(c echo.Context) error {
 		Server:      transaction.Server,
 		Balance:     fmt.Sprintf("%.2f", newBalance),
 		Number:      transaction.Number,
-		IP:          ipDetails,
+		IP:          ipDetail,
 	}
 
 	err = services.NumberCancelDetails(cancelDetail)

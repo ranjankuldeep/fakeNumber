@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -47,7 +48,8 @@ type IpDetails struct {
 	IP              string `json:"ip"`
 }
 
-// RechargeUpiApi handles the UPI recharge request
+var userLocks sync.Map
+
 func RechargeUpiApi(c echo.Context) error {
 	ctx := context.Background()
 	db := c.Get("db").(*mongo.Database)
@@ -58,11 +60,12 @@ func RechargeUpiApi(c echo.Context) error {
 	if userId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_USER_ID"})
 	}
-	userObjectID, _ := primitive.ObjectIDFromHex(userId)
-	// if email == "" {
-	// 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_EMAIL"})
-	// }
+	userLock := getUserLock(userId)
 
+	userLock.Lock()
+	defer userLock.Unlock()
+
+	userObjectID, _ := primitive.ObjectIDFromHex(userId)
 	var user models.User
 
 	userCollection := models.InitializeUserCollection(db)
@@ -71,7 +74,6 @@ func RechargeUpiApi(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	// Check recharge maintenance
 	var rechargeData models.RechargeAPI
 	rechargeCollection := models.InitializeRechargeAPICollection(db)
 
@@ -83,8 +85,6 @@ func RechargeUpiApi(c echo.Context) error {
 	if rechargeData.Maintenance {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "UPI recharge is under maintenance."})
 	}
-
-	// Fetch transaction details
 	upiUrl := fmt.Sprintf("https://own5k.in/p/u.php?txn=%s", transactionId)
 	resp, err := http.Get(upiUrl)
 	if err != nil {
@@ -99,7 +99,6 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
 	}
 
-	// Handle error in UPI response
 	if upiData.Error != "" {
 		log.Println("UPI API returned error:", upiData.Error)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Transaction Not Found. Please try again."})
@@ -116,7 +115,6 @@ func RechargeUpiApi(c echo.Context) error {
 	if float64(upiData.Amount) < minimumRecharge.MinimumRecharge {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Recharge amount is less than %0.2f amount", minimumRecharge.MinimumRecharge)})
 	}
-	// Prepare payload for SaveRechargeHistory
 	rechargeHistoryUrl := fmt.Sprintf("%sapi/save-recharge-history", os.Getenv("BASE_API_URL"))
 	rechargePayload := map[string]interface{}{
 		"userId":         userId,
@@ -126,23 +124,17 @@ func RechargeUpiApi(c echo.Context) error {
 		"status":         "Received",
 	}
 	rechargePayloadBytes, _ := json.Marshal(rechargePayload)
-
-	// Log the payload being sent
-	log.Printf("[INFO] Sending recharge history payload: %s", string(rechargePayloadBytes))
 	rechargeResp, err := http.Post(rechargeHistoryUrl, "application/json", bytes.NewReader(rechargePayloadBytes))
 	if err != nil {
 		log.Printf("[ERROR] Recharge history save error: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save recharge history."})
 	}
 	defer rechargeResp.Body.Close()
-
-	// Log the response status and body
 	responseBody, _ := ioutil.ReadAll(rechargeResp.Body)
 	log.Printf("[INFO] Recharge history save response status: %d", rechargeResp.StatusCode)
 	log.Printf("[INFO] Recharge history save response body: %s", string(responseBody))
 
 	if rechargeResp.StatusCode == http.StatusBadRequest {
-		// Extract error message from the SaveRechargeHistory API response
 		var errorResponse map[string]string
 		if err := json.Unmarshal(responseBody, &errorResponse); err != nil {
 			log.Printf("[ERROR] Failed to parse error response: %v", err)
@@ -188,7 +180,6 @@ func RechargeUpiApi(c echo.Context) error {
 		logs.Logger.Error(err)
 		logs.Logger.Error("Unable to send upi recharge message")
 	}
-	// Respond to client
 	return c.JSON(http.StatusOK, map[string]string{
 		"message":   fmt.Sprintf("%d₹ Added Successfully!", upiData.Amount),
 		"ipDetails": ipDetail,
@@ -199,7 +190,6 @@ type ResponseStructure struct {
 	Result bool `json:"result"`
 }
 
-// RechargeTrxApi handles TRX recharge transactions.
 func RechargeTrxApi(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	log.Println("INFO: RechargeTrxApi endpoint invoked")
@@ -554,4 +544,18 @@ func GetMaintenanceStatus(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, MaintenanceResponse{Maintenance: maintenance})
+}
+
+func getUserLock(userId string) *sync.Mutex {
+	lock, ok := userLocks.Load(userId)
+	if !ok {
+		newLock := &sync.Mutex{}
+		userLocks.Store(userId, newLock)
+		return newLock
+	}
+	return lock.(*sync.Mutex)
+}
+
+func cleanupUserLock(userId string) {
+	userLocks.Delete(userId)
 }

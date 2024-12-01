@@ -143,7 +143,7 @@ func SaveRechargeHistory(c echo.Context) error {
 
 	// Validate and format date-time
 	log.Println("[INFO] Validating and formatting date_time")
-	const primaryDateTimeFormat = "01/02/2006T03:04:05 PM"
+	const primaryDateTimeFormat = "01-02-2006T03:04:05 PM"
 	const secondaryDateTimeFormat = "2006-01-02 03:04:05 PM"
 	var formattedDateTime string
 
@@ -195,6 +195,16 @@ func SaveRechargeHistory(c echo.Context) error {
 		log.Println("[ERROR] Database error while fetching user wallet:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
+	// Define IST timezone
+	istLocation, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		log.Println("[ERROR] Failed to load IST timezone:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to load timezone"})
+	}
+
+	parsedTimeInIST := parsedTime.In(istLocation)
+	formattedDateTime = parsedTimeInIST.Format(primaryDateTimeFormat)
+	log.Printf("[DEBUG] Formatted date_time in IST: %s\n", formattedDateTime)
 
 	// Update balance if status is "Received"
 	if request.Status == "Received" {

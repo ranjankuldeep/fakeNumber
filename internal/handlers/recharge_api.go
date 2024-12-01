@@ -192,33 +192,23 @@ type ResponseStructure struct {
 
 func RechargeTrxApi(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	log.Println("INFO: RechargeTrxApi endpoint invoked")
-
-	// Get query parameters
 	address := c.QueryParam("address")
 	hash := c.QueryParam("hash")
 	userId := c.QueryParam("userId")
-	exchangeRateStr := c.QueryParam("exchangeRate")
-	email := c.QueryParam("email")
-	logs.Logger.Info(hash, exchangeRateStr)
 
-	// Validate input parameters
-	if address == "" || hash == "" || userId == "" || exchangeRateStr == "" || email == "" {
+	if address == "" || hash == "" || userId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Missing required query parameters",
 		})
 	}
 
-	// Parse exchange rate to float
-	exchangeRate, err := strconv.ParseFloat(exchangeRateStr, 64)
+	exchangeRate, err := utils.FetchTRXPrice()
 	if err != nil {
-		log.Println("ERROR: Invalid exchange rate:", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid exchange rate",
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to get exchange rate",
 		})
 	}
 
-	// Fetch transaction data
 	trxApiURL := fmt.Sprintf("https://own5k.in/tron/?type=txnid&address=%s&hash=%s", address, hash)
 	req, _ := http.NewRequest("GET", trxApiURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
@@ -338,7 +328,7 @@ func RechargeTrxApi(c echo.Context) error {
 		Email:        user.Email,
 		UserID:       userId,
 		Trx:          fmt.Sprintf("%.2f", trxData.TRX),
-		ExchangeRate: exchangeRateStr,
+		ExchangeRate: fmt.Sprintf("%0.2f", exchangeRate),
 		Amount:       amount,
 		Balance:      fmt.Sprintf("%.2f", apiWalletUser.Balance),
 		Address:      fromAddress,

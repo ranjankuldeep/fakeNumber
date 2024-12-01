@@ -107,7 +107,6 @@ func processOrder(order models.Order, db *mongo.Database) {
 	var transactionData models.TransactionHistory
 	err := transactionCollection.FindOne(ctx, transactionFilter).Decode(&transactionData)
 	if err != nil {
-		log.Printf("Error finding transactions for order %s: %v", order.NumberID, err)
 		return
 	}
 

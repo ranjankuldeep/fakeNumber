@@ -353,7 +353,7 @@ func RechargeTrxApi(c echo.Context) error {
 		Balance:      fmt.Sprintf("%.2f", apiWalletUser.Balance),
 		Address:      fromAddress,
 		SendTo:       toAddress,
-		Status:       "Success",
+		Status:       "",
 		Hash:         hash,
 		IP:           ipDetail,
 	}

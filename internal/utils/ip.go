@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -40,14 +41,13 @@ func GetUserIP(c echo.Context) (string, error) {
 func ExtractIpDetails(c echo.Context) (string, error) {
 	ip, err := GetUserIP(c)
 	if err != nil {
-		return "", c.JSON(http.StatusInternalServerError, map[string]string{"error": "Unable to fetch IP Address"})
+		return "", fmt.Errorf("failed to get ip address")
 	}
 
 	apiURL := fmt.Sprintf("http://ip-api.com/json/%s", ip)
 	resp, err := http.Get(apiURL)
 	if err != nil {
-		fmt.Println("Error fetching IP details:", err)
-		return "", c.JSON(http.StatusInternalServerError, map[string]string{"error": "Unable to fetch IP details"})
+		return "", errors.New("unbale to fetch ip details")
 	}
 
 	defer resp.Body.Close()
@@ -63,12 +63,11 @@ func ExtractIpDetails(c echo.Context) (string, error) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		fmt.Println("Error decoding API response:", err)
-		return "", c.JSON(http.StatusInternalServerError, map[string]string{"error": "Unable to Parse Ip Details"})
+		return "", fmt.Errorf("Unable to parse ip details")
 	}
 
 	if data.Status == "fail" {
-		return "", c.JSON(http.StatusInternalServerError, map[string]string{"error": data.Message})
+		return "", errors.New(data.Message)
 	}
 	ipDetails := IPDetails{
 		City:            data.City,

@@ -44,7 +44,7 @@ func GetRechargeHistory(c echo.Context) error {
 	cursor.All(ctx, &rechargeHistoryData)
 
 	if len(rechargeHistoryData) == 0 {
-		return c.JSON(http.StatusOK, echo.Map{"message": "No recharge history found for the provided userId"})
+		return c.JSON(http.StatusOK, rechargeHistoryData)
 	}
 
 	// Reverse the recharge history data

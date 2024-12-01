@@ -231,6 +231,7 @@ func RechargeTrxApi(c echo.Context) error {
 	var trxData struct {
 		TRX     float64 `json:"trx"`
 		SUCCESS bool    `json:"success"`
+		Message string  `json:"message"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&trxData); err != nil {
@@ -242,11 +243,11 @@ func RechargeTrxApi(c echo.Context) error {
 
 	if trxData.SUCCESS == false {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "TRX ADDRESS NOT FOUND",
+			"error": trxData.Message,
 		})
 	}
 
-	if trxData.TRX <= 0 {
+	if trxData.TRX <= 1 {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Invalid TRX transaction",
 		})

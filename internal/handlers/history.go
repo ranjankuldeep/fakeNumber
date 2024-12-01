@@ -38,7 +38,7 @@ func GetRechargeHistory(c echo.Context) error {
 	var rechargeHistoryData []models.RechargeHistory
 	cursor, err := rechargeHistoryCol.Find(ctx, bson.M{"userId": userId})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch recharge history"})
+		return c.JSON(http.StatusOK, rechargeHistoryData)
 	}
 	defer cursor.Close(ctx)
 	cursor.All(ctx, &rechargeHistoryData)
@@ -78,7 +78,7 @@ func GetTransactionHistory(c echo.Context) error {
 	var transactionHistoryData []models.TransactionHistory
 	cursor, err := transactionHistoryCol.Find(ctx, bson.M{"userId": userId})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch transaction history"})
+		return c.JSON(http.StatusOK, transactionHistoryData)
 	}
 	defer cursor.Close(ctx)
 	cursor.All(ctx, &transactionHistoryData)

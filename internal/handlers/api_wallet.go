@@ -220,7 +220,7 @@ func UpdateRechargeHandler(c echo.Context) error {
 		"transaction_id": fmt.Sprintf("Admin%02d%02d%02d", time.Now().Hour(), time.Now().Minute(), time.Now().Second()),
 		"amount":         fmt.Sprintf("%.2f", requestBody.RechargeAmount),
 		"payment_type":   "Admin Added",
-		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
+		"date_time":      time.Now().In(time.FixedZone("IST", 5*3600+30*60)).Format("2006-01-02T15:04:05"),
 		"status":         "Received",
 	}
 

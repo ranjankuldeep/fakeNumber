@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -25,27 +24,31 @@ func GetNumberHandlerApi(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	apiKey := c.QueryParam("apikey")
 	server := c.QueryParam("server")
-	serviceNameWithSpaces := c.QueryParam("servicename")
-	serviceName := strings.ReplaceAll(serviceNameWithSpaces, "%", " ")
+	code := c.QueryParam("code")
+	otp := c.QueryParam("otp")
+
 	ctx := context.TODO()
 
 	if apiKey == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty key"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty api key"})
 	}
 	if server == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty server number"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty server value"})
+	}
+	if otp == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty otp value"})
+	}
+	if code == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty code value"})
 	}
 	serverNumber, _ := strconv.Atoi(server)
-	if serviceName == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty service name"})
-	}
 
 	var apiWalletUser models.ApiWalletUser
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
-	err := apiWalletCollection.FindOne(context.TODO(), bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	err := apiWalletCollection.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
-		if err == mongo.ErrEmptySlice {
-			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "invalid api key"})
+		if err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid api key"})
 		}
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
@@ -55,34 +58,55 @@ func GetNumberHandlerApi(c echo.Context) error {
 	var user models.User
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
 	if user.Blocked {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "your account is blocked, contact the admin"})
+		return c.JSON(http.StatusForbidden, echo.Map{"error": "your account is blocked, contact the admin"})
 	}
 
+	// Fetch server information
 	var serverInfo models.Server
 	serverCollection := models.InitializeServerCollection(db)
 	err = serverCollection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverInfo)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "server not found"})
 	}
 
-	if serverInfo.Maintenance == true {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "under maintenance"})
+	if serverInfo.Maintenance {
+		return c.JSON(http.StatusServiceUnavailable, echo.Map{"error": "server under maintenance"})
 	}
 
-	serverListollection := models.InitializeServerListCollection(db)
-	var serverList models.ServerList
-	err = serverListollection.FindOne(ctx, bson.M{
-		"name":           serviceName,
+	// Fetch service name from server list
+	serverListCollection := models.InitializeServerListCollection(db)
+	var serviceList models.ServerList
+	err = serverListCollection.FindOne(ctx, bson.M{
 		"servers.server": serverNumber,
-	}).Decode(&serverList)
+		"servers.code":   code,
+	}).Decode(&serviceList)
 	if err != nil {
-		logs.Logger.Error("couldn't find server list")
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		logs.Logger.Error("service not found for given server and code")
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "service not found"})
 	}
 
+	// Identify the specific service based on server and code
+	var serviceName string
+	for _, s := range serviceList.Servers {
+		if s.Server == serverNumber && s.Code == code {
+			serviceName = serviceList.Name
+			break
+		}
+	}
+
+	isMultiple := "false"
+	if otp == "single" {
+		isMultiple = "true"
+	}
+
+	if serviceName == "" {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "service name could not be resolved"})
+	}
+
+	// Process server data
 	var serverData models.ServerData
-	for _, s := range serverList.Servers {
+	for _, s := range serviceList.Servers {
 		if s.Server == serverNumber {
 			serverData = models.ServerData{
 				Price:  s.Price,
@@ -90,39 +114,32 @@ func GetNumberHandlerApi(c echo.Context) error {
 				Otp:    s.Otp,
 				Server: serverNumber,
 			}
+			break
 		}
 	}
 
-	isMultiple := "false"
 	apiURLRequest, err := constructApiUrl(db, server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
 	if err != nil {
-		logs.Logger.Error("Couldn't construcrt api url")
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		logs.Logger.Error("failed to construct API URL")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
 	}
-	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
 	numData, err := ExtractNumber(server, apiURLRequest)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
 	}
-
-	logs.Logger.Info(fmt.Sprintf("id-%s number-%s", numData.Id, numData.Number))
-
 	price, _ := strconv.ParseFloat(serverData.Price, 64)
 	discount, err := FetchDiscount(ctx, db, user.ID.Hex(), serviceName, serverNumber)
 	price += discount
 
-	// Check user balance
 	if apiWalletUser.Balance < price {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "low balance"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "low balance"})
 	}
-
-	newBalance := apiWalletUser.Balance - price
-	roundedBalance := math.Round(newBalance*100) / 100
-	_, err = apiWalletCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": roundedBalance}})
+	newBalance := math.Round((apiWalletUser.Balance-price)*100) / 100
+	_, err = apiWalletCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": newBalance}})
 	if err != nil {
-		logs.Logger.Error("FAILED_TO_UPDATE_USER_BALANCE")
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		logs.Logger.Error("failed to update user balance")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
 	}
 
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
@@ -140,16 +157,8 @@ func GetNumberHandlerApi(c echo.Context) error {
 	}
 	_, err = transactionHistoryCollection.InsertOne(ctx, transaction)
 	if err != nil {
-		logs.Logger.Error("error saving transaction history")
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	}
-
-	var expirationTime time.Time
-	switch server {
-	case "1", "2", "3", "4", "5", "6", "8", "9", "10", "11":
-		expirationTime = time.Now().Add(19 * time.Minute)
-	case "7":
-		expirationTime = time.Now().Add(9 * time.Minute)
+		logs.Logger.Error("failed to save transaction history")
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
 	}
 
 	orderCollection := models.InitializeOrderCollection(db)
@@ -162,74 +171,22 @@ func GetNumberHandlerApi(c echo.Context) error {
 		NumberID:       numData.Id,
 		Number:         numData.Number,
 		OrderTime:      time.Now(),
-		ExpirationTime: expirationTime,
+		ExpirationTime: time.Now().Add(19 * time.Minute), // Adjust expiration time as needed
 	}
 	_, err = orderCollection.InsertOne(ctx, order)
 	if err != nil {
 		logs.Logger.Error("failed to create order")
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server errror"})
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "internal server error"})
 	}
-
-	go func(id, number, userId string, db *mongo.Database, ctx context.Context) {
-		defer func() {
-			if r := recover(); r != nil {
-				logs.Logger.Error("Recovered from panic in OTP handling goroutine:", r)
-			}
-		}()
-
-		var waitDuration time.Duration
-		switch server {
-		case "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11":
-			waitDuration = 3 * time.Minute
-		}
-		time.Sleep(waitDuration)
-
-		// Fetch server data with maintenance check
-		serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-
-		var transactionData models.TransactionHistory
-		transactionCollection := models.InitializeTransactionHistoryCollection(db)
-
-		filter := bson.M{
-			"userId": userId,
-			"id":     id,
-		}
-		err = transactionCollection.FindOne(ctx, filter).Decode(&transactionData)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-		otpArrived := false
-		if len(transactionData.OTP) != 0 {
-			otpArrived = true
-		}
-
-		if otpArrived == true {
-			logs.Logger.Infof("OTP already arrived for transaction %s, skipping third-party call.", id)
-			return
-		}
-
-		constructedNumberRequest, err := ConstructNumberUrl(server, serverData.APIKey, serverData.Token, id, number)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-
-		err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
-		if err != nil {
-			logs.Logger.Error(err)
-			return
-		}
-	}(numData.Id, numData.Number, apiWalletUser.UserID.Hex(), db, ctx)
 
 	if numData.Id == "" || numData.Number == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "no stock available"})
 	}
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "id": numData.Id, "number": numData.Number})
+	return c.JSON(http.StatusOK, echo.Map{
+		"status": "ok",
+		"id":     numData.Id,
+		"number": numData.Number,
+	})
 }
 
 func GetOTPHandlerApi(c echo.Context) error {
@@ -527,16 +484,18 @@ func GetServiceDataApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 	defer serversInMaintenance.Close(context.Background())
+
+	// Track maintenance servers
 	var maintenanceServerNumbers []int
 	for serversInMaintenance.Next(context.Background()) {
 		var server struct {
 			ServerNumber int `bson:"server"`
 		}
 		if err := serversInMaintenance.Decode(&server); err == nil {
-			log.Println(err)
 			maintenanceServerNumbers = append(maintenanceServerNumbers, server.ServerNumber)
 		}
 	}
+
 	cursor, err := serviceCollection.Find(context.Background(), bson.D{})
 	if err != nil {
 		logs.Logger.Error(err)
@@ -558,23 +517,40 @@ func GetServiceDataApi(c echo.Context) error {
 		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
+
+	// Deduplication logic
 	filteredData := []ServiceResponse{}
+	uniqueServices := make(map[string]bool)
+
 	for _, service := range services {
+		if uniqueServices[service.Name] {
+			continue // Skip duplicate services
+		}
+		uniqueServices[service.Name] = true
+
 		serverDetails := []ServerDetail{}
+		seenServers := make(map[int]bool)
+
 		for _, server := range service.Servers {
-			if contains(maintenanceServerNumbers, server.Server) {
-				continue
+			if contains(maintenanceServerNumbers, server.Server) || seenServers[server.Server] {
+				continue // Skip maintenance or duplicate servers
 			}
+			seenServers[server.Server] = true
+
 			// Calculate discounts
 			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.Name, server.Server, apiWalletUser.UserID.Hex())
 			price, _ := strconv.ParseFloat(server.Price, 64)
 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
+
+			// Normalize the OTP field
 			var otpType string
 			switch server.Otp {
 			case "Multiple Otp":
 				otpType = "multiple"
 			case "Single Otp & Fresh Number", "Single Otp":
 				otpType = "single"
+			default:
+				otpType = "unknown"
 			}
 
 			serverDetails = append(serverDetails, ServerDetail{
@@ -584,6 +560,7 @@ func GetServiceDataApi(c echo.Context) error {
 				Otp:    otpType,
 			})
 		}
+
 		sort.Slice(serverDetails, func(i, j int) bool {
 			return serverDetails[i].Server < serverDetails[j].Server
 		})
@@ -592,6 +569,7 @@ func GetServiceDataApi(c echo.Context) error {
 			Servers: serverDetails,
 		})
 	}
+
 	sort.Slice(filteredData, func(i, j int) bool {
 		return filteredData[i].Name < filteredData[j].Name
 	})

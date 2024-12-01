@@ -148,8 +148,6 @@ func RechargeUpiApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save recharge history."})
 	}
 
-	log.Println("[INFO] Recharge history saved successfully")
-
 	var apiWalletUser models.ApiWalletUser
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
 	err = apiWalletCollection.FindOne(ctx, bson.M{"userId": userObjectID}).Decode(&apiWalletUser)
@@ -201,6 +199,10 @@ func RechargeTrxApi(c echo.Context) error {
 			"error": "Missing required query parameters",
 		})
 	}
+
+	userLock := getUserLock(userId)
+	userLock.Lock()
+	defer userLock.Unlock()
 
 	exchangeRate, err := utils.FetchTRXPrice()
 	if err != nil {

@@ -123,7 +123,7 @@ func RechargeUpiApi(c echo.Context) error {
 		"transaction_id": transactionId,
 		"amount":         upiData.Amount,
 		"payment_type":   "upi",
-		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
+		"date_time":      time.Now().In(time.FixedZone("IST", 5*3600+30*60)).Format("2006-01-02T15:04:05"),
 		"status":         "Received",
 	}
 	rechargePayloadBytes, _ := json.Marshal(rechargePayload)
@@ -280,7 +280,7 @@ func RechargeTrxApi(c echo.Context) error {
 		"transaction_id": hash,
 		"amount":         amount,
 		"payment_type":   "trx",
-		"date_time":      time.Now().Format("01/02/2006T03:04:05 PM"),
+		"date_time":      time.Now().In(time.FixedZone("IST", 5*3600+30*60)).Format("2006-01-02T15:04:05"),
 		"status":         "Received",
 	}
 	payloadBytes, _ := json.Marshal(rechargeHistoryPayload)

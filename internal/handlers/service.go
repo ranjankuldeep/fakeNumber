@@ -210,6 +210,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		UserID:         apiWalletUser.UserID,
 		Service:        serviceName,
 		Price:          price,
+		NumberType:     map[string]string{"true": "multiple", "false": "single"}[isMultiple],
 		Server:         serverNumber,
 		NumberID:       numData.Id,
 		Number:         numData.Number,

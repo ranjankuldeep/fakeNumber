@@ -14,6 +14,7 @@ type Order struct {
 	Service        string             `bson:"service" json:"service" validate:"required"`
 	Price          float64            `bson:"price" json:"price" validate:"required"`
 	Server         int                `bson:"server" json:"server" validate:"required"`
+	NumberType     string             `bson:"numberType" json:"numberType"`
 	NumberID       string             `bson:"numberId" json:"numberId" validate:"required"`
 	Number         string             `bson:"number" json:"number" validate:"required"`
 	OrderTime      time.Time          `bson:"orderTime" json:"orderTime"`

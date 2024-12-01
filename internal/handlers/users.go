@@ -1292,8 +1292,8 @@ func VerifyOTP(c echo.Context) error {
 	}
 
 	// Validate the OTP
-	storedHashedOTP := otpDoc["otp"].(string) // OTP hash stored in the database
-	inputHashedOTP := hashOTP(body.OTP)       // Hash the provided OTP using the same function
+	storedHashedOTP := otpDoc["hashedOTP"].(string) // OTP hash stored in the database
+	inputHashedOTP := hashOTP(body.OTP)             // Hash the provided OTP using the same function
 	if storedHashedOTP != inputHashedOTP {
 		log.Printf("ERROR: Invalid OTP provided. Provided Hash: %s, Stored Hash: %s\n", inputHashedOTP, storedHashedOTP)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid OTP"})

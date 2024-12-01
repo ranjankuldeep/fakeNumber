@@ -1,20 +1,13 @@
 package utils
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
 	"github.com/ranjankuldeep/fakeNumber/logs"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type IPDetails struct {
@@ -89,30 +82,4 @@ func ExtractIpDetails(c echo.Context) (string, error) {
 		ipDetails.IP,
 	)
 	return response, nil
-}
-
-func StoreIp(db *mongo.Database, userId string, ipDetail string) error {
-	ipCollection := models.InitializeIpCollection(db)
-	userObjectID, err := primitive.ObjectIDFromHex(userId)
-	if err != nil {
-		return fmt.Errorf("invalid user ID: %w", err)
-	}
-
-	filter := bson.M{"userId": userObjectID}
-	update := bson.M{
-		"$set": bson.M{
-			"details":   ipDetail,
-			"updatedAt": time.Now(),
-		},
-		"$setOnInsert": bson.M{
-			"createdAt": time.Now(),
-		},
-	}
-
-	opts := options.Update().SetUpsert(true)
-	_, err = ipCollection.UpdateOne(context.TODO(), filter, update, opts)
-	if err != nil {
-		return fmt.Errorf("failed to store IP details: %w", err)
-	}
-	return nil
 }

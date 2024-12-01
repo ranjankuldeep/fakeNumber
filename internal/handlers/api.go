@@ -280,10 +280,6 @@ func GetOTPHandlerApi(c echo.Context) error {
 			if err != nil {
 				logs.Logger.Error(err)
 			}
-			err = utils.StoreIp(db, existingEntry.UserID, ipDetail)
-			if err != nil {
-				logs.Logger.Error(err)
-			}
 
 			otpDetail := services.OTPDetails{
 				Email:       userData.Email,

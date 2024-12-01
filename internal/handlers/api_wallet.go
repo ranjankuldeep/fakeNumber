@@ -259,10 +259,6 @@ func UpdateRechargeHandler(c echo.Context) error {
 	if err != nil {
 		logs.Logger.Error(err)
 	}
-	err = utils.StoreIp(db, requestBody.UserID, ipDetail)
-	if err != nil {
-		logs.Logger.Error(err)
-	}
 
 	rechargeDetails := services.AdminRechargeDetails{
 		Email:          user.Email,

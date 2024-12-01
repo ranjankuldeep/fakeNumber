@@ -164,17 +164,12 @@ func CheckAndBlockUsers(db *mongo.Database) {
 			log.Printf("Error fetching successful transaction sum for user %s: %v", user.ID.Hex(), err)
 			continue
 		}
-
-		// Adjusted balance difference calculation
 		adjustedTotal := totalRecharge - (totalTransactionSuccessPrice + totalTransactionPendingPrice)
 		divider := adjustedTotal
 		if adjustedTotal == 0 {
 			divider = 1
 		}
 		balanceDifference := (walletBalance - adjustedTotal) / divider * 100
-		// logs.Logger.Infof("balnce differnce %f for user %v", balanceDifference, user.ID.String())
-
-		// Block user if difference exceeds ±0.1%
 		if balanceDifference < -0.2 || balanceDifference > 0.2 {
 			update := bson.M{
 				"$set": bson.M{
@@ -203,7 +198,6 @@ func CheckAndBlockUsers(db *mongo.Database) {
 					ToBeBalance:    fmt.Sprintf("%0.2f", totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice)),
 					FraudAmount:    fmt.Sprintf("%0.2f", walletBalance-(totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice))),
 					Reason:         fmt.Sprintf("Due to Fraud"),
-					IpDetails:      ip.Details,
 				}
 				err = services.UserBlockDetails(blockDetails)
 				if err != nil {

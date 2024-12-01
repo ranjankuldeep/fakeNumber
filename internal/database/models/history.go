@@ -32,6 +32,8 @@ type TransactionHistory struct {
 	Server        string             `bson:"server" json:"server"`
 	Price         string             `bson:"price" json:"price"`
 	Status        string             `bson:"status" json:"status"`
+	CreatedAt     time.Time          `bson:"createdAt,omitempty" json:"createdAt"`
+	UpdatedAt     time.Time          `bson:"updatedAt,omitempty" json:"updatedAt"`
 }
 
 // InitializeRechargeHistoryCollection initializes the recharge history collection

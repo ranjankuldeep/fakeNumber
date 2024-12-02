@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -53,14 +52,21 @@ var (
 
 func main() {
 	Load(".env")
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 	e := echo.New()
+	username := os.Getenv("MONGODB_USERNAME")
+	password := os.Getenv("MONGODB_PASSWORD")
+	databaseName := os.Getenv("MONGODB_DATABASE")
+	uri := fmt.Sprintf("mongodb+srv://%s:%s@cluster0.blfflhg.mongodb.net/%s?retryWrites=true&w=majority", username, password, databaseName)
 
-	uri := "mongodb+srv://test2:amardeep885@cluster0.blfflhg.mongodb.net/Express-Backend?retryWrites=true&w=majority"
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174", "https://thriving-kangaroo-d65ee0.netlify.app", "https://gregarious-cascaron-4fbe0f.netlify.app"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
-		AllowCredentials: true, // Enable credentials
+		AllowCredentials: true,
 	}))
 	client, err := database.ConnectDB(uri)
 	if err != nil {
@@ -96,8 +102,6 @@ func main() {
 	routes.RegisterServerDiscountRoutes(e)
 	routes.RegisterApisRoutes(e)
 	routes.RegisterBlockUsersRoutes(e)
-
-	go runner.UpdateServerData(db, context.TODO())
 	go runner.MonitorOrders(db)
 	go func() {
 		for {
@@ -106,6 +110,5 @@ func main() {
 		}
 	}()
 	go runner.StartSellingTicker(db)
-	go runner.StartUpdateServerDataTicker(db)
 	e.Logger.Fatal(e.Start(":8000"))
 }

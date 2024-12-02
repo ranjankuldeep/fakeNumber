@@ -250,17 +250,21 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 	return details, nil
 }
 
-// startTicker handles the periodic execution of the SendSellingUpdate function
 func StartSellingTicker(db *mongo.Database) {
+	now := time.Now()
+	nextInterval := now.Truncate(30 * time.Minute).Add(30 * time.Minute)
+	timeUntilNext := time.Until(nextInterval)
+
+	log.Printf("First SendSellingUpdate scheduled at: %v", nextInterval)
+	time.Sleep(timeUntilNext)
+
+	_, err := SendSellingUpdate(db)
+	if err != nil {
+		log.Printf("Error in SendSellingUpdate: %v", err)
+	}
+
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
-
-	go func() {
-		_, err := SendSellingUpdate(db)
-		if err != nil {
-			log.Printf("Error in SendSellingUpdate: %v", err)
-		}
-	}()
 
 	for {
 		select {

@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/ranjankuldeep/fakeNumber/cmd/runner.go"
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
@@ -96,15 +97,15 @@ func main() {
 	routes.RegisterApisRoutes(e)
 	routes.RegisterBlockUsersRoutes(e)
 
-	go UpdateServerData(db, context.TODO())
-	go MonitorOrders(db)
+	go runner.UpdateServerData(db, context.TODO())
+	go runner.MonitorOrders(db)
 	go func() {
 		for {
-			CheckAndBlockUsers(db)
+			runner.CheckAndBlockUsers(db)
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	go StartSellingTicker(db)
-	go StartUpdateServerDataTicker(db)
+	go runner.StartSellingTicker(db)
+	go runner.StartUpdateServerDataTicker(db)
 	e.Logger.Fatal(e.Start(":8000"))
 }

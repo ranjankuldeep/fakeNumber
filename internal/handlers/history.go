@@ -26,6 +26,7 @@ func GetRechargeHistory(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Check server maintenance status
 	var serverData models.Server
 	err := serverCol.FindOne(ctx, bson.M{"server": 0}).Decode(&serverData)
 	if err != nil && err != mongo.ErrNoDocuments {
@@ -35,16 +36,22 @@ func GetRechargeHistory(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
 	}
 
+	// Query for recharge history
 	var rechargeHistoryData []models.RechargeHistory
 	cursor, err := rechargeHistoryCol.Find(ctx, bson.M{"userId": userId})
 	if err != nil {
-		return c.JSON(http.StatusOK, rechargeHistoryData)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error fetching recharge history"})
 	}
 	defer cursor.Close(ctx)
-	cursor.All(ctx, &rechargeHistoryData)
 
+	err = cursor.All(ctx, &rechargeHistoryData)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error processing recharge history data"})
+	}
+
+	// Return an empty array if no history is found
 	if len(rechargeHistoryData) == 0 {
-		return c.JSON(http.StatusOK, rechargeHistoryData)
+		return c.JSON(http.StatusOK, []models.RechargeHistory{})
 	}
 
 	// Reverse the recharge history data

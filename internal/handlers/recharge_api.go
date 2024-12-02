@@ -446,46 +446,38 @@ func ToggleMaintenance(c echo.Context) error {
 
 	log.Printf("INFO: Received input - RechargeType: %s, Status: %t\n", input.RechargeType, input.Status)
 
-	// Validate the input
 	if input.RechargeType == "" {
 		log.Println("ERROR: RechargeType is required")
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "RechargeType is required"})
 	}
-
-	// Define the filter and update
 	filter := bson.M{"recharge_type": input.RechargeType}
 	update := bson.M{"$set": bson.M{"maintenance": input.Status}}
 
-	// Log the filter and update details
-	log.Printf("INFO: Updating record with filter: %+v and update: %+v\n", filter, update)
+	log.Printf("INFO: Upserting record with filter: %+v and update: %+v\n", filter, update)
 
-	// Initialize the collection
 	rechargeApiCol := db.Collection("recharge-apis")
 
-	// Perform the update
-	var updatedRecord bson.M
-	err := rechargeApiCol.FindOneAndUpdate(
-		context.TODO(),
-		filter,
-		update,
-		options.FindOneAndUpdate().SetReturnDocument(options.After),
-	).Decode(&updatedRecord)
+	opts := options.Update().SetUpsert(true)
+	result, err := rechargeApiCol.UpdateOne(context.TODO(), filter, update, opts)
 
-	// Handle the result
-	if err == mongo.ErrNoDocuments {
-		log.Println("INFO: No record found for the given recharge type")
-		return c.JSON(http.StatusNotFound, map[string]string{"message": "Recharge type not found"})
-	} else if err != nil {
-		log.Println("ERROR: Failed to update maintenance status:", err)
+	if err != nil {
+		log.Println("ERROR: Failed to update or insert maintenance status:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
+	log.Printf("INFO: Successfully upserted maintenance status. Matched count: %d, Modified count: %d, Upserted ID: %v\n",
+		result.MatchedCount, result.ModifiedCount, result.UpsertedID)
 
-	// Log the successful update
-	log.Printf("INFO: Successfully updated maintenance status. Updated record: %+v\n", updatedRecord)
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "Maintenance status updated successfully.",
-		"data":    updatedRecord,
-	})
+	response := map[string]interface{}{
+		"message":       "Maintenance status updated successfully.",
+		"matchedCount":  result.MatchedCount,
+		"modifiedCount": result.ModifiedCount,
+	}
+
+	if result.UpsertedID != nil {
+		response["upsertedId"] = result.UpsertedID
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
 
 // GetMaintenanceStatus retrieves the maintenance status.

@@ -16,7 +16,7 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
-	"github.com/ranjankuldeep/fakeNumber/runner"
+	"github.com/ranjankuldeep/fakeNumber/internal/runner"
 )
 
 func Load(envFile string) {

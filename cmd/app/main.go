@@ -13,7 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/ranjankuldeep/fakeNumber/cmd/runner.go"
+	"github.com/ranjankuldeep/fakeNumber/cmd/runner"
 	"github.com/ranjankuldeep/fakeNumber/internal/database"
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"

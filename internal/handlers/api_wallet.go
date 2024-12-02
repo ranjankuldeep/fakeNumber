@@ -327,7 +327,7 @@ func GetAPIKeyHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 
-	rechargeCol := db.Collection("recharge-apis")
+	rechargeCol := db.Collection("admin-wallet")
 	log.Println("INFO: Collection initialized: recharge-apis")
 
 	// Get the "type" query parameter

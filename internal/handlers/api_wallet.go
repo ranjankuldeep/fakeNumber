@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -169,24 +170,42 @@ func GetUpiQR(c echo.Context) error {
 	if amount == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty amount"})
 	}
+
 	db, ok := c.Get("db").(*mongo.Database)
 	if !ok {
 		log.Println("ERROR: Failed to retrieve database instance from context")
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 
-	var admintData models.RechargeAPI
+	var adminData models.RechargeAPI
 	adminWalletCollection := models.InitializeRechargeAPICollection(db)
-	err := adminWalletCollection.FindOne(context.TODO(), bson.M{"recharge_type": "upi"}).Decode(&admintData)
+	err := adminWalletCollection.FindOne(context.TODO(), bson.M{"recharge_type": "upi"}).Decode(&adminData)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": ""})
 	}
-	upiId := admintData.APIKey
+
+	upiId := adminData.APIKey
 	qrUrl := fmt.Sprintf("https://own5k.in/qr/?upi=%s&amount=%s", upiId, amount)
-	return c.JSON(http.StatusOK, echo.Map{
-		"url": qrUrl,
-	})
+
+	resp, err := http.Get(qrUrl)
+	if err != nil {
+		log.Println("ERROR: Failed to fetch QR code SVG:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch QR code"})
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("ERROR: Non-200 response from QR code service: %d\n", resp.StatusCode)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch QR code"})
+	}
+
+	svgData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("ERROR: Failed to read QR code SVG:", err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to read QR code"})
+	}
+	return c.Blob(http.StatusOK, "image/svg+xml", svgData)
 }
 
 func UpdateRechargeHandler(c echo.Context) error {

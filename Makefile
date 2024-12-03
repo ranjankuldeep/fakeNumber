@@ -6,9 +6,8 @@ all: build run
 
 # Build for Linux x86_64
 build:
-	@echo "Building the application for Linux x86_64..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=linux GOARCH=amd64 go build -o $(BUILD_FILE) ./cmd/app
+	go build -o $(BUILD_FILE) ./cmd/app
 	@echo "Build complete. Binary saved to $(BUILD_FILE)"
 
 # Run the application

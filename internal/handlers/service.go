@@ -839,22 +839,22 @@ func HandleCheckOTP(c echo.Context) error {
 
 func HandleNumberCancel(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	ctx := context.Background()
-	id := c.QueryParam("id")
-	apiKey := c.QueryParam("api_key")
+	ctx := context.TODO()
+	apiKey := c.QueryParam("apikey")
 	server := c.QueryParam("server")
-	if id == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
-	}
+	id := c.QueryParam("id")
+
 	if apiKey == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_APIKEY"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty key"})
 	}
 	if server == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty server number"})
+	}
+	if id == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty id"})
 	}
 	serverNumber, _ := strconv.Atoi(server)
 
-	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
 	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
@@ -886,10 +886,7 @@ func HandleNumberCancel(c echo.Context) error {
 	for _, s := range serverList.Servers {
 		if s.Server == serverNumber {
 			serverDataInfo = models.ServerData{
-				Price:  s.Price,
-				Code:   s.Code,
-				Otp:    s.Otp,
-				Server: serverNumber,
+				Code: s.Code,
 			}
 		}
 	}

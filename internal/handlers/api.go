@@ -79,7 +79,6 @@ func GetNumberHandlerApi(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "server not found"})
 	}
-
 	if serverInfo.Maintenance {
 		return c.JSON(http.StatusServiceUnavailable, echo.Map{"error": "server under maintenance"})
 	}
@@ -347,7 +346,6 @@ func CancelNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty id"})
 	}
 
-	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
 	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
@@ -471,12 +469,6 @@ func CancelNumberHandlerApi(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-
-	// ipDetails, err := utils.GetIpDetails(c)
-	// if err != nil {
-	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	// }
-	// services.NumberCancelDetails(userData.Email, transaction.Service, price, server, int64(price), apiWalletUser.Balance, ipDetails)
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }
 

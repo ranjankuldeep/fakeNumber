@@ -61,11 +61,22 @@ func BalanceHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid Api Key"})
 	}
 
+	serverCollection := models.InitializeServerCollection(db)
+	var server0 models.Server
+	err := serverCollection.FindOne(context.TODO(), bson.M{"server": 0}).Decode(&server0)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if server0.Maintenance == true {
+		return c.JSON(http.StatusOK, map[string]string{"error": "site is under maintenance"})
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var user models.ApiWalletUser
-	err := walletCol.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&user)
+	err = walletCol.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&user)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "Invalid Api Key"})
 	}

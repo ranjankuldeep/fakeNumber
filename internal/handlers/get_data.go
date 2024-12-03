@@ -317,7 +317,6 @@ func GetUserServiceData(c echo.Context) error {
 		}
 	}
 
-	// Fetch service data
 	serviceCollection := db.Collection("serverList")
 	cursor, err := serviceCollection.Find(context.Background(), bson.M{})
 	if err != nil {
@@ -339,7 +338,6 @@ func GetUserServiceData(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 
-	// Process and filter data
 	filteredData := []ServiceResponse{}
 	for _, service := range services {
 		serverDetails := []ServerDetail{}

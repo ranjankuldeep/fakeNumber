@@ -98,11 +98,11 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Service code, API key, and Server are required."})
 	}
 
-	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	if server0.Maintenance == true {
@@ -457,7 +457,7 @@ func HandleGetOtp(c echo.Context) error {
 	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -874,7 +874,7 @@ func HandleNumberCancel(c echo.Context) error {
 	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}

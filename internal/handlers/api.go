@@ -46,7 +46,7 @@ func GetNumberHandlerApi(c echo.Context) error {
 	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -219,7 +219,7 @@ func GetOTPHandlerApi(c echo.Context) error {
 	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -350,7 +350,7 @@ func CancelNumberHandlerApi(c echo.Context) error {
 	// Maintenance check
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -496,7 +496,7 @@ func GetServiceDataApi(c echo.Context) error {
 	}
 	// Maintenance check
 	var server0 models.Server
-	err := serverCollection.FindOne(context.TODO(), bson.M{"server": 0}).Decode(server0)
+	err := serverCollection.FindOne(context.TODO(), bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}

@@ -377,8 +377,7 @@ func RechargeTrxApi(c echo.Context) error {
 			logs.Logger.Info("recharget trx send failed")
 		}
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
-			"ipDetails": ipDetail,
+			"message": fmt.Sprintf("%.2f₹ Added Successfully!", price),
 		})
 	}
 	rechargeDetail.Status = "ok"

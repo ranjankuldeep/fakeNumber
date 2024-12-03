@@ -118,6 +118,14 @@ func GetNumberHandlerApi(c echo.Context) error {
 		}
 	}
 
+	price, _ := strconv.ParseFloat(serverData.Price, 64)
+	discount, err := FetchDiscount(ctx, db, user.ID.Hex(), serviceName, serverNumber)
+	price += discount
+
+	if apiWalletUser.Balance < price {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "low balance"})
+	}
+
 	apiURLRequest, err := constructApiUrl(db, server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
 	if err != nil {
 		logs.Logger.Error("failed to construct API URL")
@@ -127,13 +135,6 @@ func GetNumberHandlerApi(c echo.Context) error {
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
-	}
-	price, _ := strconv.ParseFloat(serverData.Price, 64)
-	discount, err := FetchDiscount(ctx, db, user.ID.Hex(), serviceName, serverNumber)
-	price += discount
-
-	if apiWalletUser.Balance < price {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "low balance"})
 	}
 	newBalance := math.Round((apiWalletUser.Balance-price)*100) / 100
 	_, err = apiWalletCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": newBalance}})

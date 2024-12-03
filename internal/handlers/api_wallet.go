@@ -82,6 +82,11 @@ func ChangeAPIKeyHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "UserId is required"})
 	}
 
+	objectID, err := primitive.ObjectIDFromHex(userId)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -94,14 +99,14 @@ func ChangeAPIKeyHandler(c echo.Context) error {
 	}
 
 	newApiKey := uuid.New().String()
-
-	filter := bson.M{"userId": userId}
+	filter := bson.M{"userId": objectID}
 	update := bson.M{"$set": bson.M{"api_key": newApiKey}}
 
 	_, err = walletCol.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update API key"})
 	}
+
 	return c.JSON(http.StatusOK, echo.Map{"message": "API key updated successfully", "api_key": newApiKey})
 }
 

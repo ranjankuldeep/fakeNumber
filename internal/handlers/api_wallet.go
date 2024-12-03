@@ -67,7 +67,7 @@ func BalanceHandler(c echo.Context) error {
 	var user models.ApiWalletUser
 	err := walletCol.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&user)
 	if err != nil {
-		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "Invalid Api Key"})
 	}
 	return c.JSON(http.StatusOK, echo.Map{"balance": user.Balance})
 }

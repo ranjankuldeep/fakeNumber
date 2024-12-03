@@ -508,7 +508,7 @@ func GetServiceDataApi(c echo.Context) error {
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
 	err = apiWalletCollection.FindOne(context.TODO(), bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "User not found"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid Api Key"})
 	}
 
 	err = serverCollection.FindOne(context.Background(), bson.M{"server": 0}).Decode(&maintenanceStatus)

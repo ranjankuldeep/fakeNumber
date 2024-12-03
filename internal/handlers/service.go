@@ -114,13 +114,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	var user models.User
-	userCollection := models.InitializeUserCollection(db)
-	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
-	if user.Blocked {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "account blocked"})
-	}
-
 	var serverInfo models.Server
 	serverCollection := models.InitializeServerCollection(db)
 	err = serverCollection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverInfo)
@@ -141,7 +134,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-
 	var serverData models.ServerData
 	for _, s := range serverList.Servers {
 		if s.Server == serverNumber {
@@ -154,15 +146,11 @@ func HandleGetNumberRequest(c echo.Context) error {
 		}
 	}
 
-	apiURLRequest, err := constructApiUrl(db, server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
-	}
-	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
-	numData, err := ExtractNumber(server, apiURLRequest)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	var user models.User
+	userCollection := models.InitializeUserCollection(db)
+	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
+	if user.Blocked {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "account blocked"})
 	}
 
 	price, _ := strconv.ParseFloat(serverData.Price, 64)
@@ -170,6 +158,18 @@ func HandleGetNumberRequest(c echo.Context) error {
 	price += discount
 	if apiWalletUser.Balance < price {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "low balance"})
+	}
+
+	apiURLRequest, err := constructApiUrl(db, server, serverInfo.APIKey, serverInfo.Token, serverData, isMultiple)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
+	numData, err := ExtractNumber(server, apiURLRequest)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	newBalance := apiWalletUser.Balance - price

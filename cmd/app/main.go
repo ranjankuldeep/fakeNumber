@@ -63,7 +63,7 @@ func main() {
 	uri := fmt.Sprintf("mongodb+srv://%s:%s@cluster0.blfflhg.mongodb.net/%s?retryWrites=true&w=majority", username, password, databaseName)
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174", "https://thriving-kangaroo-d65ee0.netlify.app", "https://gregarious-cascaron-4fbe0f.netlify.app"},
+		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174", "https://thriving-kangaroo-d65ee0.netlify.app", "https://gregarious-cascaron-4fbe0f.netlify.app", "https://paidsms.builderx100.com"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,

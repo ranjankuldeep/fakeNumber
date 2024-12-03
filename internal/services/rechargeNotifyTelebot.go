@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -69,8 +70,12 @@ func FetchUser(userID string, db *mongo.Database) (*models.ApiWalletUser, error)
 
 // TrxRechargeTeleBot sends TRX recharge details to Telegram bot
 func TrxRechargeTeleBot(details TrxRechargeDetails) error {
+	location, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		log.Fatalf("Failed to load location: %v", err)
+	}
 	result := "Trx Recharge\n\n"
-	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05 PM"))
+	result += fmt.Sprintf("Date => %s\n\n", time.Now().In(location).Format("02-01-2006 03:04:05 PM"))
 	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
 	result += fmt.Sprintf("Trx => %s\n\n", details.Trx) // amount of trx
 	result += fmt.Sprintf("Trx Exchange Rate => %s\n\n", details.ExchangeRate)
@@ -82,7 +87,7 @@ func TrxRechargeTeleBot(details TrxRechargeDetails) error {
 	result += fmt.Sprintf("Hash Id => %s\n\n", details.Hash)
 	result += fmt.Sprintf("IP Details => \n%s\n\n", details.IP)
 
-	err := sendRCMessage(result)
+	err = sendRCMessage(result)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %v", err)
 	}
@@ -90,8 +95,12 @@ func TrxRechargeTeleBot(details TrxRechargeDetails) error {
 }
 
 func UpiRechargeTeleBot(details UpiRechargeDetails) error {
+	location, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		log.Fatalf("Failed to load location: %v", err)
+	}
 	result := "Upi Recharge\n\n"
-	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05 PM"))
+	result += fmt.Sprintf("Date => %s\n\n", time.Now().In(location).Format("02-01-2006 03:04:05 PM"))
 	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
 	result += fmt.Sprintf("Amount => %s₹\n\n", details.Amount)
 	result += fmt.Sprintf("Updated Balance => %s\n\n", details.Balance)
@@ -99,7 +108,7 @@ func UpiRechargeTeleBot(details UpiRechargeDetails) error {
 	result += fmt.Sprintf("IP Details => \n%s\n\n", details.IP)
 
 	// Use sendMessage to send the result
-	err := sendRCMessage(result)
+	err = sendRCMessage(result)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %v", err)
 	}
@@ -107,8 +116,12 @@ func UpiRechargeTeleBot(details UpiRechargeDetails) error {
 }
 
 func AdminRechargeTeleBot(details AdminRechargeDetails) error {
+	location, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		log.Fatalf("Failed to load location: %v", err)
+	}
 	result := "Recharge By Admin\n\n"
-	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05 PM"))
+	result += fmt.Sprintf("Date => %s\n\n", time.Now().In(location).Format("02-01-2006 03:04:05 PM"))
 	result += fmt.Sprintf("User Email => %s\n\n", details.Email)
 	result += fmt.Sprintf("Amount => %s₹\n\n", details.Amount) // Use string Amount directly
 	result += fmt.Sprintf("Updated Balance => %s\n\n", details.UpdatedBalance)
@@ -116,7 +129,7 @@ func AdminRechargeTeleBot(details AdminRechargeDetails) error {
 	result += fmt.Sprintf("IP Details => \n%s\n\n", details.IP)
 
 	// Use sendMessage to send the result
-	err := sendRCMessage(result)
+	err = sendRCMessage(result)
 	if err != nil {
 		return fmt.Errorf("failed to send message: %v", err)
 	}

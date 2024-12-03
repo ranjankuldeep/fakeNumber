@@ -389,11 +389,6 @@ type Discount struct {
 
 func GetServiceDataAdmin(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-
-	// Logger: Start of the function
-	log.Println("INFO: Fetching service data for admin")
-
-	// Fetch the server list data
 	var serverListData []Service
 	serverListCol := db.Collection("serverlists")
 
@@ -415,11 +410,8 @@ func GetServiceDataAdmin(c echo.Context) error {
 	}
 	if len(serverListData) == 0 {
 		log.Println("INFO: No server list data found")
-		return c.JSON(http.StatusOK, []Service{}) // Return empty array
+		return c.JSON(http.StatusOK, []Service{})
 	}
-	log.Println("INFO: Successfully fetched server list data")
-
-	// Fetch the service discount data
 	var serviceDiscountData []Discount
 	serviceDiscountCol := db.Collection("serviceDiscounts")
 
@@ -433,13 +425,9 @@ func GetServiceDataAdmin(c echo.Context) error {
 		log.Println("ERROR: Failed to decode service discount data:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to decode service discount data"})
 	}
-	log.Println("INFO: Successfully fetched service discount data")
 
-	// Fetch the server discount data
 	var serverDiscountData []Discount
 	serverDiscountCol := db.Collection("serverDiscounts")
-
-	log.Println("INFO: Fetching server discount data...")
 	cursor, err = serverDiscountCol.Find(context.Background(), bson.M{})
 	if err != nil {
 		log.Println("ERROR: Failed to fetch server discount data:", err)

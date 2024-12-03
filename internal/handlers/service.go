@@ -98,9 +98,20 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Service code, API key, and Server are required."})
 	}
 
+	// Maintenance check
+	serverCollection := models.InitializeServerCollection(db)
+	var server0 models.Server
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if server0.Maintenance == true {
+		return c.JSON(http.StatusOK, map[string]string{"error": "site is under maintenance"})
+	}
+
 	serverListCollection := models.InitializeServerListCollection(db)
 	var service models.ServerList
-	err := serverListCollection.FindOne(ctx, bson.M{"name": serviceName}).Decode(&service)
+	err = serverListCollection.FindOne(ctx, bson.M{"name": serviceName}).Decode(&service)
 	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
@@ -115,7 +126,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 
 	var serverInfo models.Server
-	serverCollection := models.InitializeServerCollection(db)
 	err = serverCollection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverInfo)
 	if err != nil {
 		logs.Logger.Error(err)
@@ -444,9 +454,20 @@ func HandleGetOtp(c echo.Context) error {
 	}
 	serverNumber, _ := strconv.Atoi(server)
 
+	// Maintenance check
+	serverCollection := models.InitializeServerCollection(db)
+	var server0 models.Server
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if server0.Maintenance == true {
+		return c.JSON(http.StatusOK, map[string]string{"error": "site is under maintenance"})
+	}
+
 	var apiWalletUser models.ApiWalletUser
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
-	err := apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	err = apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
@@ -834,6 +855,7 @@ func HandleCheckOTP(c echo.Context) error {
 }
 
 func HandleNumberCancel(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
 	ctx := context.Background()
 	id := c.QueryParam("id")
 	apiKey := c.QueryParam("api_key")
@@ -849,10 +871,20 @@ func HandleNumberCancel(c echo.Context) error {
 	}
 	serverNumber, _ := strconv.Atoi(server)
 
-	db := c.Get("db").(*mongo.Database)
+	// Maintenance check
+	serverCollection := models.InitializeServerCollection(db)
+	var server0 models.Server
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(server0)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if server0.Maintenance == true {
+		return c.JSON(http.StatusOK, map[string]string{"error": "site is under maintenance"})
+	}
+
 	var existingOrder models.Order
 	orderCollection := models.InitializeOrderCollection(db)
-	err := orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
+	err = orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "number already cancelled"})
 	}

@@ -52,10 +52,8 @@ func ApiKey(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"api_key": user.APIKey})
 }
 
-// Handler to retrieve balance
 func BalanceHandler(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	// serverCol := models.InitializeServerCollection(db)
 	walletCol := models.InitializeApiWalletuserCollection(db)
 
 	apiKey := c.QueryParam("api_key")
@@ -74,7 +72,6 @@ func BalanceHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"balance": user.Balance})
 }
 
-// Handler to change API key
 func ChangeAPIKeyHandler(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	serverCol := models.InitializeServerCollection(db)

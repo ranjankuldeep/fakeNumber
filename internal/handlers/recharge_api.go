@@ -175,8 +175,7 @@ func RechargeUpiApi(c echo.Context) error {
 		logs.Logger.Error("Unable to send upi recharge message")
 	}
 	return c.JSON(http.StatusOK, map[string]string{
-		"message":   fmt.Sprintf("%d₹ Added Successfully!", upiData.Amount),
-		"ipDetails": ipDetail,
+		"message": fmt.Sprintf("%d₹ Added Successfully!", upiData.Amount),
 	})
 }
 
@@ -389,8 +388,7 @@ func RechargeTrxApi(c echo.Context) error {
 		logs.Logger.Info("recharget trx send failed")
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message":   fmt.Sprintf("%.2f₹ Added Successfully!", price),
-		"ipDetails": ipDetail,
+		"message": fmt.Sprintf("%.2f₹ Added Successfully!", price),
 	})
 }
 

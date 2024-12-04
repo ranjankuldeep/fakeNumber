@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
@@ -257,6 +258,8 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 	return details, nil
 }
 
+var mu sync.Mutex
+
 func StartSellingTicker(db *mongo.Database) {
 	now := time.Now()
 	nextInterval := now.Truncate(30 * time.Minute).Add(30 * time.Minute)
@@ -265,7 +268,9 @@ func StartSellingTicker(db *mongo.Database) {
 	log.Printf("First SendSellingUpdate scheduled at: %v", nextInterval)
 	time.Sleep(timeUntilNext)
 
+	mu.Lock()
 	_, err := SendSellingUpdate(db)
+	mu.Unlock()
 	if err != nil {
 		log.Printf("Error in SendSellingUpdate: %v", err)
 	}
@@ -276,7 +281,9 @@ func StartSellingTicker(db *mongo.Database) {
 	for {
 		select {
 		case <-ticker.C:
+			mu.Lock()
 			_, err := SendSellingUpdate(db)
+			mu.Unlock()
 			if err != nil {
 				log.Printf("Error in SendSellingUpdate: %v", err)
 			}

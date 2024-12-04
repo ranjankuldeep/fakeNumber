@@ -591,11 +591,7 @@ func HandleGetOtp(c echo.Context) error {
 			}(validOtp)
 		}
 	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": "All OTPs processed successfully",
-	})
+	return c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": transaction.OTP})
 }
 
 func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {

@@ -177,7 +177,7 @@ type ServiceResponse struct {
 }
 
 type ServerDetail struct {
-	Server string `json:"server"`
+	Server string `json:"serverNumber"`
 	Price  string `json:"price"`
 	Code   string `json:"code"`
 	Otp    string `json:"otp"`
@@ -364,17 +364,6 @@ func GetUserServiceData(c echo.Context) error {
 	return c.JSON(http.StatusOK, filteredData)
 }
 
-type ServiceServer struct {
-	ServerNumber int    `bson:"serverNumber" json:"serverNumber"`
-	Price        string `bson:"price" json:"price"`
-}
-
-type Service struct {
-	Name        string          `bson:"name" json:"name"`
-	LowestPrice string          `bson:"lowestPrice" json:"lowestPrice"`
-	Servers     []ServiceServer `bson:"servers" json:"servers"`
-}
-
 type Discount struct {
 	Service  string  `bson:"service" json:"service"`
 	Server   int     `bson:"server" json:"server"`
@@ -383,23 +372,22 @@ type Discount struct {
 
 func GetServiceDataAdmin(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-
-	var serverListData []Service
-	serverListCol := models.InitializeServerListCollection(db)
-	cursor, err := serverListCol.Find(context.Background(), bson.M{})
+	serviceCollection := models.InitializeServerListCollection(db)
+	cursor, err := serviceCollection.Find(context.Background(), bson.D{})
 	if err != nil {
-		log.Println("ERROR: Failed to fetch server list data:", err)
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch server list data"})
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
-	if err := cursor.All(context.Background(), &serverListData); err != nil {
-		log.Println("ERROR: Failed to decode server list data:", err)
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to decode server list data"})
-	}
-	if len(serverListData) == 0 {
-		log.Println("INFO: No server list data found")
-		return c.JSON(http.StatusOK, []Service{})
+	var services []models.ServerList
+	for cursor.Next(context.Background()) {
+		var service models.ServerList
+		if err := cursor.Decode(&service); err != nil {
+			logs.Logger.Error(err)
+		}
+		services = append(services, service)
 	}
 
+	defer cursor.Close(context.Background())
 	var serviceDiscountData []Discount
 	serviceDiscountCol := models.InitializeServiceDiscountCollection(db)
 	cursor, err = serviceDiscountCol.Find(context.Background(), bson.M{})
@@ -424,7 +412,6 @@ func GetServiceDataAdmin(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to decode server discount data"})
 	}
 
-	// Create maps for discounts
 	serviceDiscountMap := make(map[string]float64)
 	for _, discount := range serviceDiscountData {
 		key := discount.Service + "_" + strconv.Itoa(discount.Server)
@@ -436,48 +423,45 @@ func GetServiceDataAdmin(c echo.Context) error {
 		serverDiscountMap[discount.Server] = discount.Discount
 	}
 
-	// Map to aggregate unique services
-	uniqueServices := make(map[string]Service)
+	filteredData := []ServiceResponse{}
+	seenServices := make(map[string]bool)
 
-	for _, service := range serverListData {
-		if _, exists := uniqueServices[service.Name]; !exists {
-			uniqueServices[service.Name] = Service{
-				Name:        service.Name,
-				LowestPrice: service.LowestPrice,
-				Servers:     []ServiceServer{},
-			}
+	for _, service := range services {
+		if seenServices[service.Name] {
+			continue
 		}
-
-		currentService := uniqueServices[service.Name]
-		sort.Slice(service.Servers, func(a, b int) bool {
-			return service.Servers[a].ServerNumber < service.Servers[b].ServerNumber
-		})
-
+		seenServices[service.Name] = true
+		serverDetails := []ServerDetail{}
 		for _, server := range service.Servers {
-			serverKey := service.Name + "_" + strconv.Itoa(server.ServerNumber)
-			discount := serviceDiscountMap[serverKey] + serverDiscountMap[server.ServerNumber]
+			serviceKey := service.Name + "_" + strconv.Itoa(server.Server)
+			discount := serviceDiscountMap[serviceKey] + serverDiscountMap[server.Server]
 			originalPrice, err := strconv.ParseFloat(server.Price, 64)
 			if err != nil {
-				log.Printf("ERROR: Invalid price format for service %s, server %d: %v\n", service.Name, server.ServerNumber, err)
+				log.Printf("ERROR: Invalid price format for service %s, server %d: %v\n", service.Name, server.Server, err)
 				continue
 			}
 			finalPrice := originalPrice + discount
-			server.Price = strconv.FormatFloat(finalPrice, 'f', 2, 64)
-
-			currentService.Servers = append(currentService.Servers, server)
+			serverDetails = append(serverDetails, ServerDetail{
+				Server: strconv.Itoa(server.Server),
+				Price:  strconv.FormatFloat(finalPrice, 'f', 2, 64),
+				Code:   server.Code,
+				Otp:    server.Otp,
+			})
 		}
-
-		uniqueServices[service.Name] = currentService
+		sort.Slice(serverDetails, func(i, j int) bool {
+			iServer, _ := strconv.Atoi(serverDetails[i].Server)
+			jServer, _ := strconv.Atoi(serverDetails[j].Server)
+			return iServer < jServer
+		})
+		filteredData = append(filteredData, ServiceResponse{
+			Name:    service.Name,
+			Servers: serverDetails,
+		})
 	}
-
-	var finalServerListData []Service
-	for _, service := range uniqueServices {
-		finalServerListData = append(finalServerListData, service)
-	}
-	sort.Slice(finalServerListData, func(i, j int) bool {
-		return finalServerListData[i].Name < finalServerListData[j].Name
+	sort.Slice(filteredData, func(i, j int) bool {
+		return filteredData[i].Name < filteredData[j].Name
 	})
-	return c.JSON(http.StatusOK, finalServerListData)
+	return c.JSON(http.StatusOK, filteredData)
 }
 
 func contains(arr []int, num int) bool {

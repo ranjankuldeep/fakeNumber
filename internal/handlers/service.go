@@ -116,7 +116,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	err = apiWalletUserCollection.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "invalid api key"})
 	}
 
 	var user models.User

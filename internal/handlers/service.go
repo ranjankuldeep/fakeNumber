@@ -513,10 +513,13 @@ func HandleGetOtp(c echo.Context) error {
 
 		var transaction models.TransactionHistory
 		transactionCollection := models.InitializeTransactionHistoryCollection(db)
-		err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+		err = transactionCollection.FindOne(ctx, bson.M{"id": id, "server": server}).Decode(&transaction)
+		if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "invalid server number"})
+		}
 		if err != nil {
 			logs.Logger.Error(err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		}
 
 		if len(transaction.OTP) == 0 {
@@ -527,7 +530,6 @@ func HandleGetOtp(c echo.Context) error {
 					"date_time": formattedData,
 				},
 			}
-
 			_, err = transactionCollection.UpdateOne(ctx, transactionUpdateFilter, transactionpdate)
 			if err != nil {
 				logs.Logger.Error(err)

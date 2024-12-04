@@ -452,13 +452,13 @@ func HandleGetOtp(c echo.Context) error {
 	server := c.QueryParam("server")
 
 	if id == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_ID"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "empty id"})
 	}
 	if apiKey == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "EMPTY_APIKEY"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "empty api key"})
 	}
 	if server == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "EMPTY_SERVER"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"errror": "empty server"})
 	}
 
 	serverCollection := models.InitializeServerCollection(db)
@@ -476,7 +476,7 @@ func HandleGetOtp(c echo.Context) error {
 	err = apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid api key"})
 	}
 
 	var transaction models.TransactionHistory
@@ -492,7 +492,7 @@ func HandleGetOtp(c echo.Context) error {
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&userData)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid api key"})
 	}
 
 	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
@@ -504,7 +504,7 @@ func HandleGetOtp(c echo.Context) error {
 	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid server number"})
 	}
 
 	validOtpList, err := fetchOTP(server, id, constructedOTPRequest)
@@ -736,8 +736,11 @@ func HandleCancelOrder(c echo.Context) error {
 	id := c.QueryParam("id")
 	userId := c.QueryParam("userId")
 	if id == "" {
-		fmt.Println("ERROR: id is missing")
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "id is required"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty id"})
+	}
+
+	if userId == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty id"})
 	}
 
 	userObjectID, err := primitive.ObjectIDFromHex(userId)
@@ -866,6 +869,22 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"error": "site is under maintenance"})
 	}
 
+	var apiWalletUser models.ApiWalletUser
+	apiWalletColl := models.InitializeApiWalletuserCollection(db)
+	err = apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	if err != nil || err == mongo.ErrEmptySlice {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid api key"})
+	}
+
+	var user models.User
+	userCollection := models.InitializeUserCollection(db)
+	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
+	if err != nil || err == mongo.ErrEmptySlice {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "user not found"})
+	}
+
 	var existingOrder models.Order
 	orderCollection := models.InitializeOrderCollection(db)
 	err = orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
@@ -890,22 +909,6 @@ func HandleNumberCancel(c echo.Context) error {
 				Code: s.Code,
 			}
 		}
-	}
-
-	var apiWalletUser models.ApiWalletUser
-	apiWalletColl := models.InitializeApiWalletuserCollection(db)
-	err = apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
-	if err != nil || err == mongo.ErrEmptySlice {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_API_KEY"})
-	}
-
-	var user models.User
-	userCollection := models.InitializeUserCollection(db)
-	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
-	if err != nil || err == mongo.ErrEmptySlice {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "USER_NOT_FOUND"})
 	}
 
 	timeDifference := time.Now().Sub(existingOrder.OrderTime)

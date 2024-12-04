@@ -122,7 +122,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	var user models.User
 	userCollection := models.InitializeUserCollection(db)
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
-	if user.Blocked {
+	if user.Blocked == true {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "account blocked"})
 	}
 
@@ -158,9 +158,9 @@ func HandleGetNumberRequest(c echo.Context) error {
 		}
 	}
 
-	isMultiple := "false"
+	isMultiple := "true"
 	if otp == "single" {
-		isMultiple = "true"
+		isMultiple = "false"
 	}
 
 	var serviceName string
@@ -462,7 +462,7 @@ func HandleGetOtp(c echo.Context) error {
 
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server)
+	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}

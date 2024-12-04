@@ -20,7 +20,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type BalanceRequest struct {
@@ -289,7 +288,6 @@ func GetUserServiceData(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "BAD REQUEST"})
 	}
 
-	// Check site maintenance status
 	var maintenanceStatus struct {
 		Maintenance bool `bson:"maintainance"`
 	}
@@ -299,7 +297,6 @@ func GetUserServiceData(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, echo.Map{"error": "Site is under maintenance."})
 	}
 
-	// Fetch servers in maintenance
 	serversInMaintenance, err := serverCollection.Find(context.Background(), bson.M{"maintainance": true})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
@@ -317,7 +314,8 @@ func GetUserServiceData(c echo.Context) error {
 		}
 	}
 
-	serviceCollection := db.Collection("serverList")
+	// Actual fetching logic
+	serviceCollection := models.InitializeServerListCollection(db)
 	cursor, err := serviceCollection.Find(context.Background(), bson.M{})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
@@ -332,7 +330,6 @@ func GetUserServiceData(c echo.Context) error {
 		}
 	}
 
-	// Load discounts
 	serviceDiscounts, serverDiscounts, userDiscounts, err := loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDiscountCollection, userId)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
@@ -356,7 +353,6 @@ func GetUserServiceData(c echo.Context) error {
 			})
 		}
 
-		// Sort by server number and add to filtered data
 		sort.Slice(serverDetails, func(i, j int) bool {
 			return serverDetails[i].Server < serverDetails[j].Server
 		})
@@ -387,17 +383,10 @@ type Discount struct {
 
 func GetServiceDataAdmin(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
+
 	var serverListData []Service
-	serverListCol := db.Collection("serverlists")
-
-	log.Println("INFO: Fetching server list data...")
-	findOptions := options.Find().SetProjection(bson.M{
-		"name":        1,
-		"lowestPrice": 1,
-		"servers":     1,
-	})
-
-	cursor, err := serverListCol.Find(context.Background(), bson.M{}, findOptions)
+	serverListCol := models.InitializeServerListCollection(db)
+	cursor, err := serverListCol.Find(context.Background(), bson.M{})
 	if err != nil {
 		log.Println("ERROR: Failed to fetch server list data:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch server list data"})
@@ -410,10 +399,9 @@ func GetServiceDataAdmin(c echo.Context) error {
 		log.Println("INFO: No server list data found")
 		return c.JSON(http.StatusOK, []Service{})
 	}
-	var serviceDiscountData []Discount
-	serviceDiscountCol := db.Collection("serviceDiscounts")
 
-	log.Println("INFO: Fetching service discount data...")
+	var serviceDiscountData []Discount
+	serviceDiscountCol := models.InitializeServiceDiscountCollection(db)
 	cursor, err = serviceDiscountCol.Find(context.Background(), bson.M{})
 	if err != nil {
 		log.Println("ERROR: Failed to fetch service discount data:", err)
@@ -425,7 +413,7 @@ func GetServiceDataAdmin(c echo.Context) error {
 	}
 
 	var serverDiscountData []Discount
-	serverDiscountCol := db.Collection("serverDiscounts")
+	serverDiscountCol := models.InitializeServerDiscountCollection(db)
 	cursor, err = serverDiscountCol.Find(context.Background(), bson.M{})
 	if err != nil {
 		log.Println("ERROR: Failed to fetch server discount data:", err)
@@ -435,10 +423,8 @@ func GetServiceDataAdmin(c echo.Context) error {
 		log.Println("ERROR: Failed to decode server discount data:", err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to decode server discount data"})
 	}
-	log.Println("INFO: Successfully fetched server discount data")
 
 	// Create maps for discounts
-	log.Println("INFO: Creating discount maps...")
 	serviceDiscountMap := make(map[string]float64)
 	for _, discount := range serviceDiscountData {
 		key := discount.Service + "_" + strconv.Itoa(discount.Server)
@@ -449,34 +435,51 @@ func GetServiceDataAdmin(c echo.Context) error {
 	for _, discount := range serverDiscountData {
 		serverDiscountMap[discount.Server] = discount.Discount
 	}
-	log.Println("INFO: Discount maps created")
 
-	log.Println("INFO: Sorting server list data...")
-	sort.Slice(serverListData, func(i, j int) bool {
-		return serverListData[i].Name < serverListData[j].Name
-	})
+	// Map to aggregate unique services
+	uniqueServices := make(map[string]Service)
 
-	for i, service := range serverListData {
+	for _, service := range serverListData {
+		if _, exists := uniqueServices[service.Name]; !exists {
+			uniqueServices[service.Name] = Service{
+				Name:        service.Name,
+				LowestPrice: service.LowestPrice,
+				Servers:     []ServiceServer{},
+			}
+		}
+
+		currentService := uniqueServices[service.Name]
 		sort.Slice(service.Servers, func(a, b int) bool {
 			return service.Servers[a].ServerNumber < service.Servers[b].ServerNumber
 		})
 
-		for j, server := range service.Servers {
-			serviceKey := service.Name + "_" + strconv.Itoa(server.ServerNumber)
-			discount := serviceDiscountMap[serviceKey] + serverDiscountMap[server.ServerNumber]
+		for _, server := range service.Servers {
+			serverKey := service.Name + "_" + strconv.Itoa(server.ServerNumber)
+			discount := serviceDiscountMap[serverKey] + serverDiscountMap[server.ServerNumber]
 			originalPrice, err := strconv.ParseFloat(server.Price, 64)
 			if err != nil {
 				log.Printf("ERROR: Invalid price format for service %s, server %d: %v\n", service.Name, server.ServerNumber, err)
 				continue
 			}
 			finalPrice := originalPrice + discount
-			serverListData[i].Servers[j].Price = strconv.FormatFloat(finalPrice, 'f', 2, 64)
+			server.Price = strconv.FormatFloat(finalPrice, 'f', 2, 64)
+
+			currentService.Servers = append(currentService.Servers, server)
 		}
+
+		uniqueServices[service.Name] = currentService
 	}
-	return c.JSON(http.StatusOK, serverListData)
+
+	var finalServerListData []Service
+	for _, service := range uniqueServices {
+		finalServerListData = append(finalServerListData, service)
+	}
+	sort.Slice(finalServerListData, func(i, j int) bool {
+		return finalServerListData[i].Name < finalServerListData[j].Name
+	})
+	return c.JSON(http.StatusOK, finalServerListData)
 }
 
-// Helper functions
 func contains(arr []int, num int) bool {
 	for _, n := range arr {
 		if n == num {
@@ -486,7 +489,6 @@ func contains(arr []int, num int) bool {
 	return false
 }
 
-// loadDiscounts loads discount data for services, servers, and users
 func loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDiscountCollection *mongo.Collection, userId string) (map[string]float64, map[int]float64, map[string]float64, error) {
 	// Load service discounts
 	serviceDiscounts := make(map[string]float64)

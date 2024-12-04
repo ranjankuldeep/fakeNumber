@@ -178,9 +178,9 @@ func CheckAndBlockUsers(db *mongo.Database) {
 			}
 			_, err = userCollection.UpdateOne(ctx, bson.M{"_id": user.ID}, update)
 			if err != nil {
-				log.Printf("Failed to block user %s: %v", user.ID.Hex(), err)
+				logs.Logger.Errorf("Failed to block user %s: %v", user.ID.Hex(), err)
 			} else {
-				log.Printf("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
+				logs.Logger.Infof("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
 				var ip models.Ip
 				ipCollection := models.InitializeIpCollection(db)
 				err := ipCollection.FindOne(ctx, bson.M{"userId": user.ID}).Decode(&ip)

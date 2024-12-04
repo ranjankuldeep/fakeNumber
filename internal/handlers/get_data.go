@@ -257,7 +257,9 @@ func GetServiceData(c echo.Context) error {
 			})
 		}
 		sort.Slice(serverDetails, func(i, j int) bool {
-			return serverDetails[i].Server < serverDetails[j].Server
+			iServer, _ := strconv.Atoi(serverDetails[i].Server)
+			jServer, _ := strconv.Atoi(serverDetails[j].Server)
+			return iServer < jServer
 		})
 		filteredData = append(filteredData, ServiceResponse{
 			Name:    service.Name,
@@ -352,9 +354,10 @@ func GetUserServiceData(c echo.Context) error {
 				Price:  adjustedPrice,
 			})
 		}
-
 		sort.Slice(serverDetails, func(i, j int) bool {
-			return serverDetails[i].Server < serverDetails[j].Server
+			iServer, _ := strconv.Atoi(serverDetails[i].Server)
+			jServer, _ := strconv.Atoi(serverDetails[j].Server)
+			return iServer < jServer
 		})
 		filteredData = append(filteredData, ServiceResponse{
 			Servers: serverDetails,

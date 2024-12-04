@@ -7,8 +7,5 @@ import (
 
 func RegisterApisRoutes(e *echo.Echo) {
 	apiGroup := e.Group("/api")
-	// apiGroup.GET("/number", handlers.GetNumberHandlerApi)
-	// apiGroup.GET("/otp", handlers.GetOTPHandlerApi)
-	// apiGroup.GET("/cancel", handlers.CancelNumberHandlerApi)
 	apiGroup.GET("/get-service", handlers.GetServiceDataApi)
 }

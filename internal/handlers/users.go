@@ -29,7 +29,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // Allowed email domains
@@ -208,7 +207,6 @@ func SignUp(c echo.Context) error {
 
 // Replace with actual DB lookup logic
 func findUserByEmail(email string) (interface{}, error) {
-	// Return nil if user is not found
 	return nil, nil
 }
 
@@ -433,11 +431,9 @@ func Login(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
 
-	// Compare the provided password with the hashed password
-	err = bcrypt.CompareHashAndPassword([]byte(loginUser.Password), []byte(req.Password))
-	if err != nil {
+	if loginUser.Password != req.Password {
 		log.Println("ERROR: Invalid credentials")
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
+		c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 	}
 
 	// Fetch the wallet information
@@ -816,7 +812,6 @@ func ChangePasswordUnauthenticated(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Find the OTP document for the provided email
 	var otpDoc bson.M
 	err := otpCol.FindOne(ctx, bson.M{"email": email}).Decode(&otpDoc)
 	if err == mongo.ErrNoDocuments {
@@ -825,20 +820,12 @@ func ChangePasswordUnauthenticated(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
 
-	// Delete the OTP document
 	_, err = otpCol.DeleteOne(ctx, bson.M{"email": email})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to delete OTP document"})
 	}
 
-	// Hash the new password
-	newHashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to hash password"})
-	}
-
-	// Update the user document with the new password
-	update := bson.M{"$set": bson.M{"password": string(newHashedPassword)}}
+	update := bson.M{"$set": bson.M{"password": string(password)}}
 	_, err = userCol.UpdateOne(ctx, bson.M{"email": email}, update)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update password"})
@@ -872,6 +859,10 @@ func ChangePasswordAuthenticated(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Please complete the CAPTCHA"})
 	}
 
+	if request.NewPassword == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "please enter new pasword"})
+	}
+
 	// Verify CAPTCHA
 	if err := verifyCaptcha(request.Captcha); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
@@ -895,23 +886,12 @@ func ChangePasswordAuthenticated(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
 
-	// Compare the provided current password with the stored hashed password
 	currentPassword := user["password"].(string)
-	err = bcrypt.CompareHashAndPassword([]byte(currentPassword), []byte(request.CurrentPassword))
-	if err != nil {
-		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "Current password is incorrect"})
+	if currentPassword != request.CurrentPassword {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "current password doesn't match"})
 	}
 
-	// Hash the new password
-	newHashedPassword, err := bcrypt.GenerateFromPassword([]byte(request.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to hash password"})
-	}
-
-	// Update the user's password
-	filter := bson.M{"_id": userID}
-	update := bson.M{"$set": bson.M{"password": string(newHashedPassword)}}
-	_, err = userCol.UpdateOne(ctx, filter, update)
+	_, err = userCol.UpdateOne(ctx, bson.M{"_id": userID}, bson.M{"$set": bson.M{"password": request.NewPassword}})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update password"})
 	}
@@ -1020,7 +1000,6 @@ func GetUser(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "userId is required"})
 	}
 
-	// Convert userId to ObjectID
 	objID, err := primitive.ObjectIDFromHex(userId)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid userId format"})
@@ -1029,17 +1008,14 @@ func GetUser(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Fetch user data excluding the password field
 	var user bson.M
-	projection := bson.M{"password": 0}
-	err = userCol.FindOne(ctx, bson.M{"_id": objID}, options.FindOne().SetProjection(projection)).Decode(&user)
+	err = userCol.FindOne(ctx, bson.M{"_id": objID}).Decode(&user)
 	if err == mongo.ErrNoDocuments {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "User not found"})
 	} else if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch user data"})
 	}
 
-	// Fetch user's API wallet data
 	var wallet bson.M
 	err = walletCol.FindOne(ctx, bson.M{"userId": objID}).Decode(&wallet)
 	if err == mongo.ErrNoDocuments {
@@ -1048,7 +1024,6 @@ func GetUser(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch API wallet data"})
 	}
 
-	// Combine user data with wallet data
 	userDataWithWallet := user
 	if balance, ok := wallet["balance"]; ok {
 		userDataWithWallet["balance"] = balance
@@ -1067,7 +1042,6 @@ func GetUser(c echo.Context) error {
 	if trxPrivateKey, ok := wallet["trxPrivateKey"]; ok {
 		userDataWithWallet["trxPrivateKey"] = trxPrivateKey
 	}
-
 	return c.JSON(http.StatusOK, userDataWithWallet)
 }
 
@@ -1305,17 +1279,11 @@ func VerifyOTP(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to delete OTP"})
 	}
 
-	// Hash the password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to hash password"})
-	}
-
 	// Create a new user
 	newUser := models.User{
 		ID:        primitive.NewObjectID(),
 		Email:     body.Email,
-		Password:  string(hashedPassword),
+		Password:  body.Password,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}

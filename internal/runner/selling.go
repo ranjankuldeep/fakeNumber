@@ -18,6 +18,10 @@ import (
 func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error) {
 	var details services.SellingUpdateDetails
 	ctx := context.TODO()
+	// Get the current date
+	startOfDay := time.Now().Truncate(24 * time.Hour)            // Start of the day (12:00am)
+	endOfDay := startOfDay.Add(24 * time.Hour).Add(-time.Second) // End of the day (11:59:59pm)
+
 	// 1. Fetch Total User Count
 	usersCollection := models.InitializeUserCollection(db)
 	totalUsers, err := usersCollection.CountDocuments(ctx, bson.M{})
@@ -28,15 +32,18 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 
 	// 2. Fetch Transaction Details
 	transactionCollection := models.InitializeTransactionHistoryCollection(db)
-
 	// Aggregate total sold, cancelled, and pending
 	transactionsPipeline := mongo.Pipeline{
-		bson.D{
-			{Key: "$group", Value: bson.D{
-				{Key: "_id", Value: "$status"},
-				{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+		bson.D{{Key: "$match", Value: bson.D{
+			{Key: "createdAt", Value: bson.D{
+				{Key: "$gte", Value: startOfDay},
+				{Key: "$lte", Value: endOfDay},
 			}},
-		},
+		}}},
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$status"},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+		}}},
 	}
 	cursor, err := transactionCollection.Aggregate(ctx, transactionsPipeline)
 	if err != nil {
@@ -67,7 +74,11 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 	// Aggregate transactions grouped by server with "SUCCESS" status
 	serverPipeline := mongo.Pipeline{
 		bson.D{{Key: "$match", Value: bson.D{
-			{Key: "status", Value: "SUCCESS"}, // Include only transactions with "SUCCESS" status
+			{Key: "status", Value: "SUCCESS"},
+			{Key: "createdAt", Value: bson.D{
+				{Key: "$gte", Value: startOfDay},
+				{Key: "$lte", Value: endOfDay},
+			}},
 		}}},
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: "$server"},
@@ -105,10 +116,6 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 
 	// 3. Fetch Recharge Details
 	rechargeCollection := models.InitializeRechargeHistoryCollection(db)
-
-	// Get the current date
-	startOfDay := time.Now().Truncate(24 * time.Hour)            // Start of the day (12:00am)
-	endOfDay := startOfDay.Add(24 * time.Hour).Add(-time.Second) // End of the day (11:59:59pm)
 
 	// Define the pipeline for recharges within the day
 	rechargePipeline := mongo.Pipeline{

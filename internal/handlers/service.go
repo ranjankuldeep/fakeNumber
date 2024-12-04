@@ -209,6 +209,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		Number:        numData.Number,
 		Status:        "PENDING",
 		DateTime:      time.Now().In(time.FixedZone("IST", 5*3600+30*60)).Format("2006-01-02T15:04:05"),
+		CreatedAt:     time.Now(),
 	}
 	_, err = transactionHistoryCollection.InsertOne(ctx, transaction)
 	if err != nil {

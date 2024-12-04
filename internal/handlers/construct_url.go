@@ -205,7 +205,7 @@ func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error)
 			Headers: map[string]string{},
 		}, nil
 	default:
-		return ApiRequest{}, fmt.Errorf("INVLAID_SERVER_CHOICE")
+		return ApiRequest{}, fmt.Errorf("ivalid server number")
 	}
 }
 

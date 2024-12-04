@@ -504,7 +504,7 @@ func HandleGetOtp(c echo.Context) error {
 	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid server number"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
 	validOtpList, err := fetchOTP(server, id, constructedOTPRequest)
@@ -523,7 +523,7 @@ func HandleGetOtp(c echo.Context) error {
 		}
 
 		if len(transaction.OTP) == 0 {
-			transactionUpdateFilter := bson.M{"id": id}
+			transactionUpdateFilter := bson.M{"id": id, "server": server}
 			transactionpdate := bson.M{
 				"$set": bson.M{
 					"status":    "CANCELLED",
@@ -540,15 +540,14 @@ func HandleGetOtp(c echo.Context) error {
 
 	for _, validOtp := range validOtpList {
 		transactionCollection := models.InitializeTransactionHistoryCollection(db)
-
 		// Check if the validOtp is already present in the `otp` slice
-		filter := bson.M{"id": id, "otp": validOtp}
+		filter := bson.M{"id": id, "otp": validOtp, "server": server}
 		var existingEntry models.TransactionHistory
 		err = transactionCollection.FindOne(ctx, filter).Decode(&existingEntry)
 		if err == mongo.ErrNoDocuments {
 			formattedDateTime := FormatDateTime()
 			update := bson.M{
-				"$addToSet": bson.M{"otp": validOtp}, // Add the OTP to the `otp` slice
+				"$addToSet": bson.M{"otp": validOtp},
 				"$set": bson.M{
 					"status":    "SUCCESS",
 					"date_time": formattedDateTime,
@@ -955,7 +954,7 @@ func HandleNumberCancel(c echo.Context) error {
 	constructedNumberRequest, err := ConstructNumberUrl(server, serverData.APIKey, serverData.Token, id, existingOrder.Number)
 	if err != nil {
 		logs.Logger.Error(err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "INVALID_SERVER"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 
 	err = CancelNumberThirdParty(constructedNumberRequest.URL, server, id, db, constructedNumberRequest.Headers)
@@ -973,7 +972,7 @@ func HandleNumberCancel(c echo.Context) error {
 	}
 
 	// Update the status to "CANCELLED" for the existing document
-	transactionUpdateFilter := bson.M{"id": id}
+	transactionUpdateFilter := bson.M{"id": id, "server": server}
 	transactionpdate := bson.M{
 		"$set": bson.M{
 			"status":    "CANCELLED",
@@ -986,7 +985,7 @@ func HandleNumberCancel(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-	// Refund the balance if no otp arrived
+
 	price, err := strconv.ParseFloat(transaction.Price, 64)
 	if err != nil {
 		logs.Logger.Error(err)

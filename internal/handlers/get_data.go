@@ -338,7 +338,12 @@ func GetUserServiceData(c echo.Context) error {
 	}
 
 	filteredData := []ServiceResponse{}
+	seenServices := make(map[string]bool)
 	for _, service := range services {
+		if seenServices[service.Name] {
+			continue
+		}
+		seenServices[service.Name] = true
 		serverDetails := []ServerDetail{}
 		for _, server := range service.Servers {
 			if contains(maintenanceServerNumbers, server.Server) {

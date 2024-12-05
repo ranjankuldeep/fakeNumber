@@ -105,7 +105,7 @@ func main() {
 	go func() {
 		for {
 			runner.CheckAndBlockUsers(db)
-			time.Sleep(1 * time.Second)
+			time.Sleep(3 * time.Second)
 		}
 	}()
 	go runner.StartSellingTicker(db)

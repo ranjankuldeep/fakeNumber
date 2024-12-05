@@ -25,6 +25,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type ApiRequest struct {
@@ -474,7 +475,7 @@ func HandleGetOtp(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	if server0.Maintenance == true {
-		return c.JSON(http.StatusOK, map[string]string{"error": "site is under maintenance"})
+		return c.JSON(http.StatusOK, map[string]string{"error": "under maintenance"})
 	}
 
 	var apiWalletUser models.ApiWalletUser
@@ -487,12 +488,17 @@ func HandleGetOtp(c echo.Context) error {
 
 	var transaction models.TransactionHistory
 	transactionCollection := models.InitializeTransactionHistoryCollection(db)
-	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+	err = transactionCollection.FindOne(ctx, bson.M{"id": id, "server": server}).Decode(&transaction)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-
+	if transaction.Status == "CANCELLED" {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"status": "ok",
+			"otp":    "number cancelled",
+		})
+	}
 	var userData models.User
 	userCollection := models.InitializeUserCollection(db)
 	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&userData)
@@ -549,7 +555,6 @@ func HandleGetOtp(c echo.Context) error {
 
 	for _, validOtp := range validOtpList {
 		transactionCollection := models.InitializeTransactionHistoryCollection(db)
-		// Check if the validOtp is already present in the `otp` slice
 		filter := bson.M{"id": id, "otp": validOtp, "server": server}
 		var existingEntry models.TransactionHistory
 		err = transactionCollection.FindOne(ctx, filter).Decode(&existingEntry)
@@ -599,9 +604,44 @@ func HandleGetOtp(c echo.Context) error {
 					log.Printf("Successfully triggered next OTP for ID: %s, OTP: %s", id, otp)
 				}
 			}(validOtp)
+
+			recentOtpCollection := models.InitializeVerifyRecentOTPCollection(db)
+			recentOtpFilter := bson.M{"transaction_id": id}
+			recentOtpUpdate := bson.M{
+				"$set": bson.M{
+					"otp":       validOtp,
+					"updatedAt": time.Now(),
+				},
+				"$setOnInsert": bson.M{
+					"transaction_id": id,
+					"createdAt":      time.Now(),
+				},
+			}
+			_, err = recentOtpCollection.UpdateOne(ctx, recentOtpFilter, recentOtpUpdate, options.Update().SetUpsert(true))
+			if err != nil {
+				logs.Logger.Error("Failed to insert or update recent OTP:", err)
+			}
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]interface{}{"status": "ok", "otp": transaction.OTP})
+
+	recentOtpCollection := models.InitializeVerifyRecentOTPCollection(db)
+	var recentOtp models.RecentOTP
+	err = recentOtpCollection.FindOne(ctx, bson.M{"transaction_id": id}).Decode(&recentOtp)
+	if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"status": "ok",
+			"otp":    "waiting for otp",
+		})
+	}
+	if err != nil {
+		logs.Logger.Error("Failed to fetch recent OTP:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"status": "ok",
+		"otp":    recentOtp.OTP,
+	})
 }
 
 func triggerNextOtp(db *mongo.Database, server, serviceName, id string) error {

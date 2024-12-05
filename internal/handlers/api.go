@@ -260,7 +260,7 @@ func GetOTPHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "your account is blocked, contact the admin"})
 	}
 
-	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	serverData, err := getServerDataWithMaintenanceCheck(db, server)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -382,7 +382,7 @@ func CancelNumberHandlerApi(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "your account is blocked, contact the admin"})
 	}
 
-	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	serverData, err := getServerDataWithMaintenanceCheck(db, server)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})

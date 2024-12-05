@@ -507,7 +507,7 @@ func HandleGetOtp(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid api key"})
 	}
 
-	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	serverData, err := getServerDataWithMaintenanceCheck(db, server)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -889,7 +889,6 @@ func HandleCheckOTP(c echo.Context) error {
 
 func HandleNumberCancel(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	ctx := context.TODO()
 	apiKey := c.QueryParam("apikey")
 	server := c.QueryParam("server")
 	id := c.QueryParam("id")
@@ -907,7 +906,9 @@ func HandleNumberCancel(c echo.Context) error {
 
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
+	sererCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := serverCollection.FindOne(sererCtx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -917,7 +918,9 @@ func HandleNumberCancel(c echo.Context) error {
 
 	var apiWalletUser models.ApiWalletUser
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
-	err = apiWalletColl.FindOne(ctx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	apiWalletCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = apiWalletColl.FindOne(apiWalletCtx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid api key"})
@@ -925,7 +928,9 @@ func HandleNumberCancel(c echo.Context) error {
 
 	var user models.User
 	userCollection := models.InitializeUserCollection(db)
-	err = userCollection.FindOne(ctx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
+	userCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = userCollection.FindOne(userCtx, bson.M{"_id": apiWalletUser.UserID}).Decode(&user)
 	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "user not found"})
@@ -933,14 +938,18 @@ func HandleNumberCancel(c echo.Context) error {
 
 	var existingOrder models.Order
 	orderCollection := models.InitializeOrderCollection(db)
-	err = orderCollection.FindOne(ctx, bson.M{"numberId": id}).Decode(&existingOrder)
+	orderCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = orderCollection.FindOne(orderCtx, bson.M{"numberId": id}).Decode(&existingOrder)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "number already cancelled"})
 	}
 
 	var serverList models.ServerList
 	serverListollection := models.InitializeServerListCollection(db)
-	err = serverListollection.FindOne(ctx, bson.M{
+	sererListCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = serverListollection.FindOne(sererListCtx, bson.M{
 		"name":           existingOrder.Service,
 		"servers.server": serverNumber,
 	}).Decode(&serverList)
@@ -962,7 +971,7 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "wait 2 mints before cancel"})
 	}
 
-	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
+	serverData, err := getServerDataWithMaintenanceCheck(db, server)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "under maintenance"})
 	}
@@ -978,8 +987,9 @@ func HandleNumberCancel(c echo.Context) error {
 		"id":     id,
 		"server": server,
 	}
-
-	err = transactionCollection.FindOne(ctx, filter).Decode(&transactionData)
+	transactionCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = transactionCollection.FindOne(transactionCtx, filter).Decode(&transactionData)
 	if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid server"})
 	}
@@ -988,7 +998,9 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_FETCH_TRANSACTION_HISTORY_DATA"})
 	}
 
-	_, err = orderCollection.DeleteOne(ctx, bson.M{"numberId": id})
+	orderUpdateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = orderCollection.DeleteOne(orderUpdateCtx, bson.M{"numberId": id})
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_NOT_FOUND"})
@@ -1017,7 +1029,9 @@ func HandleNumberCancel(c echo.Context) error {
 
 	formattedData := FormatDateTime()
 	var transaction models.TransactionHistory
-	err = transactionCollection.FindOne(ctx, bson.M{"id": id}).Decode(&transaction)
+	transacCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = transactionCollection.FindOne(transacCtx, bson.M{"id": id}).Decode(&transaction)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1031,8 +1045,9 @@ func HandleNumberCancel(c echo.Context) error {
 			"date_time": formattedData,
 		},
 	}
-
-	_, err = transactionCollection.UpdateOne(ctx, transactionUpdateFilter, transactionpdate)
+	updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = transactionCollection.UpdateOne(updateCtx, transactionUpdateFilter, transactionpdate)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1050,7 +1065,9 @@ func HandleNumberCancel(c echo.Context) error {
 	}
 	balanceFilter := bson.M{"userId": apiWalletUser.UserID}
 
-	_, err = apiWalletColl.UpdateOne(ctx, balanceFilter, balanceUpdate)
+	apiWallCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = apiWalletColl.UpdateOne(apiWallCtx, balanceFilter, balanceUpdate)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1197,11 +1214,13 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 	return nil
 }
 
-func getServerDataWithMaintenanceCheck(ctx context.Context, db *mongo.Database, server string) (models.Server, error) {
+func getServerDataWithMaintenanceCheck(db *mongo.Database, server string) (models.Server, error) {
 	serverNumber, _ := strconv.Atoi(server)
 	var serverData models.Server
 	collection := models.InitializeServerCollection(db)
-	err := collection.FindOne(ctx, bson.M{"server": serverNumber}).Decode(&serverData)
+	sererCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := collection.FindOne(sererCtx, bson.M{"server": serverNumber}).Decode(&serverData)
 	if err != nil {
 		return models.Server{}, err
 	}

@@ -984,7 +984,6 @@ func GetAllUsers(c echo.Context) error {
 	if len(users) == 0 {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "No user data"})
 	}
-
 	return c.JSON(http.StatusOK, users)
 }
 

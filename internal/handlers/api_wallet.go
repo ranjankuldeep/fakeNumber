@@ -100,7 +100,6 @@ func ChangeAPIKeyHandler(c echo.Context) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	isMaintenance, err := checkMaintenance(ctx, serverCol)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
@@ -121,12 +120,6 @@ func ChangeAPIKeyHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{"message": "API key updated successfully", "api_key": newApiKey})
 }
 
-// Handler to update UPI QR code
-func UpiQRUpdateHandler(c echo.Context) error {
-	return nil
-}
-
-// Handler to create or update API key for recharge type
 func CreateOrUpdateAPIKeyHandler(c echo.Context) error {
 	db, ok := c.Get("db").(*mongo.Database)
 	if !ok {

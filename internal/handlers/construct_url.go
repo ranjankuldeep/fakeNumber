@@ -253,7 +253,7 @@ func ConstructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequ
 		}, nil
 	case "9":
 		return ApiRequest{
-			URL:     fmt.Sprintf("https://own5k.in/p/ccpay.php?type=cancel&number=%s", number),
+			URL:     fmt.Sprintf("https://php.paidsms.org/ccpay.php?type=cancel&number=%s", number),
 			Headers: map[string]string{},
 		}, nil
 	case "10":

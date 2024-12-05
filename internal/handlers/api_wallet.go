@@ -192,7 +192,7 @@ func GetUpiQR(c echo.Context) error {
 	}
 
 	upiId := adminData.APIKey
-	qrUrl := fmt.Sprintf("https://own5k.in/qr/?upi=%s&amount=%s", upiId, amount)
+	qrUrl := fmt.Sprintf("https://php.paidsms.org/qr/?upi=%s&amount=%s", upiId, amount)
 
 	resp, err := http.Get(qrUrl)
 	if err != nil {
@@ -249,7 +249,7 @@ func UpdateRechargeHandler(c echo.Context) error {
 	}
 
 	host := c.Request().Host
-	protocol := "http"
+	protocol := "https" //change in production to https and http for localhost testing
 	rechargeHistoryURL := fmt.Sprintf("%s://%s/api/save-recharge-history", protocol, host)
 	rechargeHistoryJSON, _ := json.Marshal(rechargeHistory)
 	req, err := http.NewRequest("POST", rechargeHistoryURL, bytes.NewBuffer(rechargeHistoryJSON))

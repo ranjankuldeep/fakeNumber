@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
@@ -97,13 +98,13 @@ func FetchBlockStatus(ctx context.Context, db *mongo.Database) (bool, error) {
 	return blockStatus.Block, nil
 }
 
-// Handler to clear fraudulent user data
 func BlockFraudClear(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	walletCol := models.InitializeApiWalletuserCollection(db)
 	rechargeHistoryCol := models.InitializeRechargeHistoryCollection(db)
 	transactionHistoryCol := models.InitializeTransactionHistoryCollection(db)
 	userCollection := models.InitializeUserCollection(db)
+	logs.Logger.Info("I have been called to block user")
 
 	userId := c.QueryParam("userId")
 	if userId == "" {
@@ -112,7 +113,6 @@ func BlockFraudClear(c echo.Context) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
 	objID, err := primitive.ObjectIDFromHex(userId)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid User ID"})
@@ -126,26 +126,25 @@ func BlockFraudClear(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error finding user"})
 	}
 
-	// Delete recharge history records for the user
 	_, err = rechargeHistoryCol.DeleteMany(ctx, bson.M{"userId": userId})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error clearing recharge history"})
 	}
 
-	// Delete transaction history records for the user
 	_, err = transactionHistoryCol.DeleteMany(ctx, bson.M{"userId": userId})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error clearing transaction history"})
 	}
 
-	// Delete the user from the wallet collection
 	_, err = walletCol.DeleteOne(ctx, bson.M{"userId": objID})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error deleting walletUser from the collection"})
 	}
+
 	_, err = userCollection.DeleteOne(ctx, bson.M{"_id": objID})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error deleting user from the collection"})
 	}
+
 	return c.JSON(http.StatusOK, echo.Map{"message": "User data cleared successfully"})
 }

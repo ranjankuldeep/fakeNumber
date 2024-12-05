@@ -17,6 +17,7 @@ import (
 
 func fetchAllUsers(ctx context.Context, db *mongo.Database) ([]models.User, error) {
 	var users []models.User
+
 	userCollection := models.InitializeUserCollection(db)
 	cursor, err := userCollection.Find(ctx, bson.M{})
 	if err != nil {
@@ -181,6 +182,7 @@ func CheckAndBlockUsers(db *mongo.Database) {
 				logs.Logger.Errorf("Failed to block user %s: %v", user.ID.Hex(), err)
 			} else {
 				logs.Logger.Infof("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
+				log.Printf("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
 				var ip models.Ip
 				ipCollection := models.InitializeIpCollection(db)
 				err := ipCollection.FindOne(ctx, bson.M{"userId": user.ID}).Decode(&ip)

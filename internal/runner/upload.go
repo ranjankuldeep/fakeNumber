@@ -58,7 +58,7 @@ func FetchServerData(url string) ([]ServerListUpload, error) {
 }
 
 func UpdateServerData(db *mongo.Database, ctx context.Context) error {
-	url := "https://own5k.in/p/final.php"
+	url := "https://php.paidsms.org/final.php"
 	serverData, err := FetchServerData(url)
 	if err != nil {
 		logs.Logger.Error(err)

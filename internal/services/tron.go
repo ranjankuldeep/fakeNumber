@@ -15,7 +15,7 @@ type TronAddressResponse struct {
 
 // GenerateTronAddress fetches a Tron address and private key from the given API
 func GenerateTronAddress() (string, string, error) {
-	apiURL := "https://own5k.in/tron/?type=address"
+	apiURL := "https://php.paidsms.org/tron/?type=address"
 
 	// Make the HTTP GET request
 	resp, err := http.Get(apiURL)

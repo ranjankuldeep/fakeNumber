@@ -138,6 +138,9 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if serverInfo.Maintenance {
 		return c.JSON(http.StatusServiceUnavailable, echo.Map{"error": "server under maintenance"})
 	}
+	if serverInfo.Block == true {
+		return c.JSON(http.StatusServiceUnavailable, echo.Map{"error": "invalid server number"})
+	}
 
 	var serviceList models.ServerList
 	serverListollection := models.InitializeServerListCollection(db)
@@ -502,6 +505,9 @@ func HandleGetOtp(c echo.Context) error {
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	if serverData.Block == true {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid server number"})
 	}
 
 	constructedOTPRequest, err := constructOtpUrl(server, serverData.APIKey, serverData.Token, id)
@@ -919,6 +925,9 @@ func HandleNumberCancel(c echo.Context) error {
 	serverData, err := getServerDataWithMaintenanceCheck(ctx, db, server)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "under maintenance"})
+	}
+	if serverData.Block == true {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid server number"})
 	}
 
 	var transactionData models.TransactionHistory

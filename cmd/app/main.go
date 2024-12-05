@@ -100,7 +100,6 @@ func main() {
 	routes.RegisterServerRoutes(e)
 	routes.RegisterServiceDiscountRoutes(e)
 	routes.RegisterServerDiscountRoutes(e)
-	routes.RegisterApisRoutes(e)
 	routes.RegisterBlockUsersRoutes(e)
 	go runner.MonitorOrders(db)
 	go func() {

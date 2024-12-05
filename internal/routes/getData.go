@@ -7,8 +7,8 @@ import (
 
 func RegisterGetDataRoutes(e *echo.Echo) {
 	dataGroup := e.Group("/api/")
-	dataGroup.GET("get-service-data", handlers.GetServiceData)
 	dataGroup.GET("get-service", handlers.GetUserServiceData)
+	dataGroup.GET("get-service-data", handlers.GetServiceData)
 	dataGroup.GET("get-service-data-admin", handlers.GetServiceDataAdmin)
 	dataGroup.GET("get-service-data-server", handlers.GetServersData)
 	dataGroup.GET("total-recharge-balance", handlers.TotalRecharge)

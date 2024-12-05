@@ -341,3 +341,7 @@ func UpdateExchangeRateAndMargin(c echo.Context) error {
 		"margin":       margin,
 	})
 }
+
+// func BlocKServer(c echo.Context) error {
+
+// }

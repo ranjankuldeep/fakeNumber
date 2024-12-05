@@ -84,7 +84,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	apiKey := c.QueryParam("apikey")
 	server := c.QueryParam("server")
 	code := c.QueryParam("code")
-	otp := c.QueryParam("otp")
+	otp := c.QueryParam("otptype")
 
 	if apiKey == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty api key"})
@@ -94,6 +94,9 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 	if otp == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty otp value"})
+	}
+	if otp != "single" && otp != "multiple" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid otp type"})
 	}
 	if code == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "empty code value"})

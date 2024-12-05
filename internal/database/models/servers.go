@@ -14,6 +14,7 @@ type Server struct {
 	ServerNumber int                `bson:"server" json:"server" validate:"required"`
 	Maintenance  bool               `bson:"maintainance" json:"maintainance" default:"false"`
 	APIKey       string             `bson:"api_key,omitempty" json:"api_key"`
+	Block        bool               `bson:"block" json:"block"`
 	Token        string             `bson:"token,omitempty" json:"token"`
 	ExchangeRate float64            `bson:"exchangeRate,omitempty" json:"exchangeRate" default:"0.0"`
 	Margin       float64            `bson:"margin,omitempty" json:"margin" default:"0.0"`

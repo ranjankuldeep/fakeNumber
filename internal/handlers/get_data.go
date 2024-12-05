@@ -182,6 +182,17 @@ type ServerDetail struct {
 	Code   string `json:"code"`
 	Otp    string `json:"otp"`
 }
+type ServerUserDetail struct {
+	Server string `json:"server"`
+	Price  string `json:"price"`
+	Code   string `json:"code"`
+	Otp    string `json:"otp"`
+}
+
+type ServiceUserResponse struct {
+	Name    string             `json:"name"`
+	Servers []ServerUserDetail `json:"servers"`
+}
 
 func GetServiceData(c echo.Context) error {
 	userId := c.QueryParam("userId")
@@ -237,14 +248,14 @@ func GetServiceData(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
 
-	filteredData := []ServiceResponse{}
+	filteredData := []ServiceUserResponse{}
 	seenServices := make(map[string]bool)
 	for _, service := range services {
 		if seenServices[service.Name] {
 			continue
 		}
 		seenServices[service.Name] = true
-		serverDetails := []ServerDetail{}
+		serverDetails := []ServerUserDetail{}
 		for _, server := range service.Servers {
 			if contains(maintenanceServerNumbers, server.Server) {
 				continue
@@ -254,7 +265,7 @@ func GetServiceData(c echo.Context) error {
 			price, _ := strconv.ParseFloat(server.Price, 64)
 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
 
-			serverDetails = append(serverDetails, ServerDetail{
+			serverDetails = append(serverDetails, ServerUserDetail{
 				Server: strconv.Itoa(server.Server),
 				Price:  adjustedPrice,
 				Code:   server.Code,
@@ -266,7 +277,7 @@ func GetServiceData(c echo.Context) error {
 			jServer, _ := strconv.Atoi(serverDetails[j].Server)
 			return iServer < jServer
 		})
-		filteredData = append(filteredData, ServiceResponse{
+		filteredData = append(filteredData, ServiceUserResponse{
 			Name:    service.Name,
 			Servers: serverDetails,
 		})

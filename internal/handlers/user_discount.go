@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/ranjankuldeep/fakeNumber/internal/database/models"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -23,10 +24,12 @@ func AddUserDiscount(c echo.Context) error {
 	var req struct {
 		Email    string  `json:"email" validate:"required,email"`
 		Service  string  `json:"service" validate:"required"`
-		Server   int     `json:"server" validate:"required"`
+		Server   string  `json:"server" validate:"required"`
 		Discount float64 `json:"discount" validate:"required"`
 	}
+
 	if err := c.Bind(&req); err != nil {
+		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input"})
 	}
 
@@ -109,19 +112,11 @@ func DeleteUserDiscount(c echo.Context) error {
 }
 
 func GetAllUserDiscounts(c echo.Context) error {
-	// Log: Start of the function
-	log.Println("INFO: Starting GetAllUserDiscounts handler")
-
 	db := c.Get("db").(*mongo.Database)
 	userDiscountCollection := models.InitializeUserDiscountCollection(db)
-	userCollection := db.Collection("users")
+	userCollection := models.InitializeUserCollection(db)
 
-	log.Println("INFO: Fetching all user discounts from the database...")
-
-	// Temporary slice to store processed discounts
 	var processedDiscounts []map[string]interface{}
-
-	// Find all documents in the userDiscount collection
 	cursor, err := userDiscountCollection.Find(context.Background(), bson.M{})
 	if err != nil {
 		log.Println("ERROR: Error fetching all discounts from the database:", err)
@@ -133,28 +128,18 @@ func GetAllUserDiscounts(c echo.Context) error {
 		}
 	}()
 
-	// Iterate over the cursor to decode each discount
 	for cursor.Next(context.Background()) {
 		var discount models.UserDiscount
 		if err := cursor.Decode(&discount); err != nil {
 			log.Println("ERROR: Error decoding discount document:", err)
 		} else {
-			// Fetch user details from the users collection
-			var user struct {
-				ID          primitive.ObjectID `bson:"_id"`
-				Email       string             `bson:"email"`
-				DisplayName string             `bson:"displayName"`
-				ProfileImg  string             `bson:"profileImg"`
-				Blocked     bool               `bson:"blocked"`
-			}
-
+			var user models.User
 			err := userCollection.FindOne(context.Background(), bson.M{"_id": discount.UserID}).Decode(&user)
 			if err != nil {
 				log.Printf("ERROR: Failed to fetch user details for userID %s: %v\n", discount.UserID.Hex(), err)
 				continue
 			}
 
-			// Construct the response object
 			discountData := map[string]interface{}{
 				"userId": map[string]interface{}{
 					"_id":         user.ID.Hex(),
@@ -173,21 +158,14 @@ func GetAllUserDiscounts(c echo.Context) error {
 		}
 	}
 
-	// Check for any errors during iteration
 	if err := cursor.Err(); err != nil {
 		log.Println("ERROR: Cursor iteration error:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Error iterating over discounts"})
 	}
-
-	// Log the total number of discounts fetched
 	log.Printf("INFO: Successfully processed %d user discounts\n", len(processedDiscounts))
-
-	// Return an empty array if no discounts are found
 	if len(processedDiscounts) == 0 {
 		log.Println("INFO: No user discounts found, returning an empty array.")
 		return c.JSON(http.StatusOK, []map[string]interface{}{})
 	}
-
-	// Return the result
 	return c.JSON(http.StatusOK, processedDiscounts)
 }

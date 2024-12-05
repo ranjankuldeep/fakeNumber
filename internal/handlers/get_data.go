@@ -466,7 +466,7 @@ func loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDisc
 		for userCursor.Next(context.Background()) {
 			var discount models.UserDiscount
 			if err := userCursor.Decode(&discount); err == nil {
-				key := discount.Service + "_" + strconv.Itoa(discount.Server)
+				key := discount.Service + "_" + discount.Server
 				userDiscounts[key] = float64(discount.Discount)
 			}
 		}

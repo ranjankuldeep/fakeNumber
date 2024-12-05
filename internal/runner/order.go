@@ -19,15 +19,12 @@ func MonitorOrders(db *mongo.Database) {
 	orderCollection := models.InitializeOrderCollection(db)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-
-	// Fetch data only with expired time.
 	for {
 		select {
 		case <-ticker.C:
 			var orders []models.Order
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-
 			cursor, err := orderCollection.Find(ctx, bson.M{})
 			if err != nil {
 				log.Printf("Error finding orders: %v", err)
@@ -41,13 +38,12 @@ func MonitorOrders(db *mongo.Database) {
 			}
 
 			for _, order := range orders {
-				go handleOrder(order.UserID, db) // Trigger a goroutine for each order
+				go handleOrder(order.UserID, db)
 			}
 		}
 	}
 }
 
-// handleOrder processes an individual order for expiration and OTP handling
 func handleOrder(userId primitive.ObjectID, db *mongo.Database) {
 	defer func() {
 		if r := recover(); r != nil {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
 	"github.com/ranjankuldeep/fakeNumber/internal/runner"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func Load(envFile string) {
@@ -73,6 +76,12 @@ func main() {
 		log.Fatal("Error initializing MongoDB connection:", err)
 	}
 	db := client.Database("Express-Backend")
+	stats, err := fetchDatabaseStats(db)
+	if err != nil {
+		log.Printf("Error fetching database stats: %v", err)
+	} else {
+		log.Printf("Database stats: %v", stats)
+	}
 	go func() {
 		for {
 			err := lib.UpdateServerToken(db)
@@ -110,4 +119,13 @@ func main() {
 	}()
 	go runner.StartSellingTicker(db)
 	e.Logger.Fatal(e.Start(":8000"))
+}
+
+func fetchDatabaseStats(db *mongo.Database) (bson.M, error) {
+	var result bson.M
+	err := db.RunCommand(context.TODO(), bson.D{{Key: "dbStats", Value: 1}}).Decode(&result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }

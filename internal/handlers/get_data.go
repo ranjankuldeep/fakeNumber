@@ -77,103 +77,15 @@ func GetServersData(c echo.Context) error {
 	return c.JSON(http.StatusOK, servers)
 }
 
-// // Handler to retrieve and process service data for admin
-// func GetServiceDataAdmin(c echo.Context) error {
-// 	db := c.Get("db").(*mongo.Database)
-// 	serverListCol := models.InitializeServerListCollection(db)
-// 	serviceDiscountCol := models.InitializeServiceDiscountCollection(db)
-// 	serverDiscountCol := models.InitializeServerDiscountCollection(db)
-
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
-
-// 	// Fetch server list data
-// 	var serverListData []models.ServerList
-// 	cursor, err := serverListCol.Find(ctx, bson.M{})
-// 	if err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch server list data"})
-// 	}
-// 	defer cursor.Close(ctx)
-
-// 	if err := cursor.All(ctx, &serverListData); err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error decoding server list data"})
-// 	}
-
-// 	// Fetch service discount data
-// 	var serviceDiscountData []models.ServiceDiscount
-// 	serviceDiscountCursor, err := serviceDiscountCol.Find(ctx, bson.M{})
-// 	if err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch service discount data"})
-// 	}
-// 	defer serviceDiscountCursor.Close(ctx)
-
-// 	if err := serviceDiscountCursor.All(ctx, &serviceDiscountData); err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error decoding service discount data"})
-// 	}
-
-// 	// Fetch server discount data
-// 	var serverDiscountData []models.ServerDiscount
-// 	serverDiscountCursor, err := serverDiscountCol.Find(ctx, bson.M{})
-// 	if err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch server discount data"})
-// 	}
-// 	defer serverDiscountCursor.Close(ctx)
-
-// 	if err := serverDiscountCursor.All(ctx, &serverDiscountData); err != nil {
-// 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error decoding server discount data"})
-// 	}
-
-// 	// Create a map for quick lookup of service discounts by service name and server number
-// 	serviceDiscountMap := make(map[string]float64)
-// 	for _, discount := range serviceDiscountData {
-// 		key := discount.Service + "_" + strconv.Itoa(discount.Server)
-// 		serviceDiscountMap[key] = discount.Discount
-// 	}
-
-// 	// Create a map for quick lookup of server discounts by server number
-// 	serverDiscountMap := make(map[int]float64)
-// 	for _, discount := range serverDiscountData {
-// 		serverDiscountMap[discount.Server] = discount.Discount
-// 	}
-
-// 	// Sort the data by service name
-// 	sort.SliceStable(serverListData, func(i, j int) bool {
-// 		return serverListData[i].Name < serverListData[j].Name
-// 	})
-
-// 	// Sort servers within each service and apply discounts
-// 	for i := range serverListData {
-// 		service := &serverListData[i]
-
-// 		// Sort servers by server number
-// 		sort.SliceStable(service.Servers, func(a, b int) bool {
-// 			return service.Servers[a].ServerNumber < service.Servers[b].ServerNumber
-// 		})
-
-// 		// Apply discounts to each server
-// 		for j := range service.Servers {
-// 			serverData := &service.Servers[j]
-// 			serviceKey := service.Name + "_" + strconv.Itoa(serverData.ServerNumber)
-
-// 			// Get service discount
-// 			discount := serviceDiscountMap[serviceKey]
-
-// 			// Add server discount if exists
-// 			discount += serverDiscountMap[serverData.Server]
-
-// 			// Update server price with discount
-// 			originalPrice, _ := strconv.ParseFloat(serverData.Price, 64)
-// 			serverData.Price = strconv.FormatFloat(originalPrice+discount, 'f', 2, 64)
-// 		}
-// 	}
-
-// 	return c.JSON(http.StatusOK, serverListData)
-// }
-
 // GetServiceData handles the service data fetching
 type ServiceResponse struct {
 	Name    string         `json:"name"`
 	Servers []ServerDetail `json:"servers"`
+}
+
+type ServiceResponseAdmin struct {
+	Name    string              `json:"name"`
+	Servers []ServerDetailAdmin `json:"servers"`
 }
 
 type ServerDetail struct {
@@ -182,6 +94,15 @@ type ServerDetail struct {
 	Code   string `json:"code"`
 	Otp    string `json:"otp"`
 }
+
+type ServerDetailAdmin struct {
+	Server string `json:"serverNumber"`
+	Price  string `json:"price"`
+	Code   string `json:"code"`
+	Otp    string `json:"otp"`
+	Block  bool   `json:"block"`
+}
+
 type ServerUserDetail struct {
 	Server string `json:"server"`
 	Price  string `json:"price"`
@@ -257,6 +178,9 @@ func GetServiceData(c echo.Context) error {
 		seenServices[service.Name] = true
 		serverDetails := []ServerUserDetail{}
 		for _, server := range service.Servers {
+			if server.Block == true {
+				continue
+			}
 			if contains(maintenanceServerNumbers, server.Server) {
 				continue
 			}
@@ -363,6 +287,9 @@ func GetUserServiceData(c echo.Context) error {
 		seenServices[service.Name] = true
 		serverDetails := []ServerDetail{}
 		for _, server := range service.Servers {
+			if server.Block == true {
+				continue
+			}
 			if contains(maintenanceServerNumbers, server.Server) {
 				continue
 			}
@@ -453,16 +380,18 @@ func GetServiceDataAdmin(c echo.Context) error {
 		serverDiscountMap[discount.Server] = discount.Discount
 	}
 
-	filteredData := []ServiceResponse{}
+	filteredData := []ServiceResponseAdmin{}
 	seenServices := make(map[string]bool)
-
 	for _, service := range services {
 		if seenServices[service.Name] {
 			continue
 		}
 		seenServices[service.Name] = true
-		serverDetails := []ServerDetail{}
+		serverDetails := []ServerDetailAdmin{}
 		for _, server := range service.Servers {
+			if server.Block == true {
+				continue
+			}
 			serviceKey := service.Name + "_" + strconv.Itoa(server.Server)
 			discount := serviceDiscountMap[serviceKey] + serverDiscountMap[server.Server]
 			originalPrice, err := strconv.ParseFloat(server.Price, 64)
@@ -471,11 +400,12 @@ func GetServiceDataAdmin(c echo.Context) error {
 				continue
 			}
 			finalPrice := originalPrice + discount
-			serverDetails = append(serverDetails, ServerDetail{
+			serverDetails = append(serverDetails, ServerDetailAdmin{
 				Server: strconv.Itoa(server.Server),
 				Price:  strconv.FormatFloat(finalPrice, 'f', 2, 64),
 				Code:   server.Code,
 				Otp:    server.Otp,
+				Block:  server.Block,
 			})
 		}
 		sort.Slice(serverDetails, func(i, j int) bool {
@@ -483,7 +413,7 @@ func GetServiceDataAdmin(c echo.Context) error {
 			jServer, _ := strconv.Atoi(serverDetails[j].Server)
 			return iServer < jServer
 		})
-		filteredData = append(filteredData, ServiceResponse{
+		filteredData = append(filteredData, ServiceResponseAdmin{
 			Name:    service.Name,
 			Servers: serverDetails,
 		})

@@ -5,11 +5,9 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/handlers"
 )
 
-// RegisterServerRoutes sets up server-related routes.
 func RegisterServerRoutes(e *echo.Echo) {
 	serverGroup := e.Group("/api/")
 
-	// Define routes and link them to handler functions
 	serverGroup.POST("add-server", handlers.AddServer)
 	serverGroup.GET("get-server", handlers.GetServer)
 	serverGroup.DELETE("delete-server", handlers.DeleteServer)
@@ -18,4 +16,5 @@ func RegisterServerRoutes(e *echo.Echo) {
 	serverGroup.POST("add-token-server9", handlers.AddTokenForServer9)
 	serverGroup.GET("get-token-server9", handlers.GetTokenForServer9)
 	serverGroup.POST("add-exchange-rate-margin-server", handlers.UpdateExchangeRateAndMargin)
+	serverGroup.POST("service-data-block-unblock", handlers.BlocKServer)
 }

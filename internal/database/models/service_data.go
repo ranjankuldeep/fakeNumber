@@ -13,6 +13,7 @@ type ServerData struct {
 	Price  string `bson:"price" json:"price"`
 	Code   string `bson:"code" json:"code"`
 	Otp    string `bson:"otp" json:"otp"`
+	Block  bool   `bson:"block" json:"block"`
 }
 
 // ServerList represents the main structure for the server list document

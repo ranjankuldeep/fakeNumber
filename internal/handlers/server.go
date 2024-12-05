@@ -342,6 +342,44 @@ func UpdateExchangeRateAndMargin(c echo.Context) error {
 	})
 }
 
-// func BlocKServer(c echo.Context) error {
+func BlocKServer(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
+	type RequestPayload struct {
+		Name         string `json:"name" validate:"required"`
+		ServerNumber string `json:"serverNumber" validate:"required"`
+		Block        bool   `json:"block"`
+	}
+	var payload RequestPayload
+	if err := c.Bind(&payload); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+	}
 
-// }
+	if payload.Name == "" || payload.ServerNumber == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "missing required fields"})
+	}
+
+	serverNumber, err := strconv.Atoi(payload.ServerNumber)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid serverNumber value"})
+	}
+
+	serverListCollection := models.InitializeServerListCollection(db)
+	filter := bson.M{"name": payload.Name, "servers.server": serverNumber}
+
+	update := bson.M{
+		"$set": bson.M{
+			"servers.$.block": payload.Block,
+			"updatedAt":       time.Now(),
+		},
+	}
+
+	result, err := serverListCollection.UpdateOne(context.TODO(), filter, update)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update server block status"})
+	}
+
+	if result.MatchedCount == 0 {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "server or service not found"})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "server block status updated successfully"})
+}

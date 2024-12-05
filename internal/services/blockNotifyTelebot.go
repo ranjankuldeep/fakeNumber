@@ -17,11 +17,11 @@ type BlockUserDetails struct {
 	CurrentBalance string
 	FraudAmount    string
 	ToBeBalance    string
+	IpDetails      string
 
 	Reason string
 }
 
-// OtpGetDetails sends OTP get details to Telegram
 func UserBlockDetails(blockInfo BlockUserDetails) error {
 	result := "User Block\n\n"
 	result += fmt.Sprintf("Date => %s\n\n", time.Now().Format("02-01-2006 03:04:05PM"))
@@ -32,6 +32,7 @@ func UserBlockDetails(blockInfo BlockUserDetails) error {
 	result += fmt.Sprintf("Current Balance => %s\n\n", blockInfo.CurrentBalance)
 	result += fmt.Sprintf("Fraud Amount => %s\n\n", blockInfo.FraudAmount)
 	result += fmt.Sprintf("Reason => %s\n\n", blockInfo.Reason)
+	result += fmt.Sprintf("IP Details => \n%s\n\n", blockInfo.IpDetails)
 	err := sendBlockMessage(result)
 	if err != nil {
 		return err

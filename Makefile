@@ -9,6 +9,7 @@ OS := $(shell uname -s)
 GOARCH := $(if $(filter $(ARCH),x86_64),amd64,$(if $(filter $(ARCH),arm64 aarch64),arm64,unknown))
 GOOS := $(if $(filter $(OS),Darwin),darwin,$(if $(filter $(OS),Linux),linux,unknown))
 
+# Default build target
 all: build
 
 build:
@@ -17,23 +18,21 @@ build:
 		echo "Unsupported platform: $(OS)/$(ARCH)"; \
 		exit 1; \
 	fi
-	@echo "Building the application for amd64..."
-	GOOS=linux GOARCH=amd64 go build -o $(BUILD_FILE_AMD64) ./cmd/app
-	@echo "Build complete for amd64. Binary saved to $(BUILD_FILE_AMD64)"
-	@echo "Building the application for arm64..."
-	GOOS=linux GOARCH=arm64 go build -o $(BUILD_FILE_ARM64) ./cmd/app
-	@echo "Build complete for arm64. Binary saved to $(BUILD_FILE_ARM64)"
-	@echo "Building the application for macOS $(GOARCH)..."
-	GOOS=darwin GOARCH=$(GOARCH) go build -o $(BUILD_FILE_MAC) ./cmd/app
-	@echo "Build complete for macOS. Binary saved to $(BUILD_FILE_MAC)"
+	@echo "Building binaries..."
+	GOOS=linux GOARCH=amd64 go build -o $(BUILD_FILE_AMD64) -buildvcs=false ./cmd/app
+	@echo "Built Linux amd64 binary at $(BUILD_FILE_AMD64)"
+	GOOS=linux GOARCH=arm64 go build -o $(BUILD_FILE_ARM64) -buildvcs=false ./cmd/app
+	@echo "Built Linux arm64 binary at $(BUILD_FILE_ARM64)"
+	GOOS=darwin GOARCH=$(GOARCH) go build -o $(BUILD_FILE_MAC) -buildvcs=false ./cmd/app
+	@echo "Built macOS binary at $(BUILD_FILE_MAC)"
 
 run:
 	@if [ "$(GOOS)" = "linux" ]; then \
 		if [ "$(GOARCH)" = "amd64" ]; then \
-			echo "Running amd64 binary..."; \
+			echo "Running Linux amd64 binary..."; \
 			$(BUILD_FILE_AMD64); \
 		elif [ "$(GOARCH)" = "arm64" ]; then \
-			echo "Running arm64 binary..."; \
+			echo "Running Linux arm64 binary..."; \
 			$(BUILD_FILE_ARM64); \
 		fi; \
 	elif [ "$(GOOS)" = "darwin" ]; then \

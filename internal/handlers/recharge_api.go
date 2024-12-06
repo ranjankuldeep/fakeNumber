@@ -85,7 +85,7 @@ func RechargeUpiApi(c echo.Context) error {
 	if rechargeData.Maintenance {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "UPI recharge is under maintenance."})
 	}
-	upiUrl := fmt.Sprintf("https://php.paidsms.org/u.php?txn=%s", transactionId)
+	upiUrl := fmt.Sprintf("https://php.paidsms.in/u.php?txn=%s", transactionId)
 	resp, err := http.Get(upiUrl)
 	if err != nil {
 		log.Println("UPI API error:", err)
@@ -206,7 +206,7 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 
-	trxApiURL := fmt.Sprintf("https://php.paidsms.org/tron/?type=txnid&address=%s&hash=%s", address, hash)
+	trxApiURL := fmt.Sprintf("https://php.paidsms.in/tron/?type=txnid&address=%s&hash=%s", address, hash)
 	req, _ := http.NewRequest("GET", trxApiURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 	client := &http.Client{}
@@ -314,7 +314,7 @@ func RechargeTrxApi(c echo.Context) error {
 	fromAddress := apiWalletUser.TRXAddress
 	privateKey := apiWalletUser.TRXPrivateKey
 
-	sentUrl := fmt.Sprintf("https://php.paidsms.org/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
+	sentUrl := fmt.Sprintf("https://php.paidsms.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
 	newClient := &http.Client{Timeout: 10 * time.Second}
 
 	ipDetail, err := utils.ExtractIpDetails(c)

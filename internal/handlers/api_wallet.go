@@ -192,7 +192,7 @@ func GetUpiQR(c echo.Context) error {
 	}
 
 	upiId := adminData.APIKey
-	qrUrl := fmt.Sprintf("https://php.paidsms.org/qr/?upi=%s&amount=%s", upiId, amount)
+	qrUrl := fmt.Sprintf("https://php.paidsms.in/qr/?upi=%s&amount=%s", upiId, amount)
 
 	resp, err := http.Get(qrUrl)
 	if err != nil {

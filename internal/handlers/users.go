@@ -250,20 +250,15 @@ func hashOTP(otp string) string {
 }
 
 func storeOTP(email string, otp string) error {
-	// MongoDB collection setup
-	db, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb+srv://test2:amardeep885@cluster0.blfflhg.mongodb.net/Express-Backend?retryWrites=true&w=majority"))
+	db, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb+srv://paidsms:11dce015@cluster0.g7wa6.mongodb.net/paidsms?retryWrites=true&w=majority&appName=Cluster0"))
 	if err != nil {
 		log.Println("ERROR: Failed to connect to MongoDB:", err)
 		return err
 	}
 	defer db.Disconnect(context.Background())
 
-	otpCollection := db.Database("Express-Backend").Collection("otp") // Replace with your DB name
-
-	// Hash the OTP
+	otpCollection := db.Database("paidsms").Collection("otp")
 	hashedOTP := hashOTP(otp)
-
-	// Filter for the email
 	filter := bson.M{"email": email}
 
 	// New OTP document to insert or update
@@ -322,7 +317,6 @@ func GoogleSignup(c echo.Context) error {
 	var user models.User
 	err = userCollection.FindOne(context.TODO(), filter).Decode(&user)
 	if err != nil {
-		// Create a new user if not found
 		now := time.Now()
 		newUser := models.User{
 			ID:          primitive.NewObjectID(),

@@ -171,6 +171,22 @@ func MaintainanceServer(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	if input.Server == 0 {
+		// Update maintenance status for all servers
+		log.Println("INFO: Updating maintenance status for all servers")
+		update := bson.M{"$set": bson.M{"maintainance": input.Maintainance}}
+		result, err := serverCollection.UpdateMany(ctx, bson.M{}, update)
+		if err != nil {
+			log.Println("ERROR: Failed to update maintenance status for all servers:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		}
+		log.Printf("INFO: Maintenance status updated for %d servers.\n", result.ModifiedCount)
+		return c.JSON(http.StatusOK, map[string]string{
+			"message": fmt.Sprintf("Maintenance status set to %t for all servers.", input.Maintainance),
+		})
+	}
+
+	// If a specific server number is provided, update that server
 	filter := bson.M{"server": input.Server}
 
 	// Check if the server exists
@@ -193,18 +209,10 @@ func MaintainanceServer(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
 
-	// Toggle or explicitly set maintenance status
-	var newStatus bool
-	if input.Server == 0 {
-		// For server 0, explicitly set the maintenance status from input
-		newStatus = input.Maintainance
-		log.Printf("INFO: Explicitly setting maintenance status for server 0 to %t\n", newStatus)
-	} else {
-		// For other servers, toggle the maintenance status
-		currentStatus := existingServer["maintainance"].(bool)
-		newStatus = !currentStatus
-		log.Printf("INFO: Toggling maintenance status for server %d from %t to %t\n", input.Server, currentStatus, newStatus)
-	}
+	// Toggle or explicitly set maintenance status for the specific server
+	currentStatus := existingServer["maintainance"].(bool)
+	newStatus := !currentStatus
+	log.Printf("INFO: Toggling maintenance status for server %d from %t to %t\n", input.Server, currentStatus, newStatus)
 
 	// Perform the update
 	update := bson.M{"$set": bson.M{"maintainance": newStatus}}

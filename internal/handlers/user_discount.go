@@ -24,7 +24,7 @@ func AddUserDiscount(c echo.Context) error {
 	var req struct {
 		Email    string  `json:"email" validate:"required,email"`
 		Service  string  `json:"service" validate:"required"`
-		Server   string  `json:"server" validate:"required"`
+		Server   int     `json:"server" validate:"required"`
 		Discount float64 `json:"discount" validate:"required"`
 	}
 

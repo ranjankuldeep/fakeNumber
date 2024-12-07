@@ -168,7 +168,6 @@ func GetServiceData(c echo.Context) error {
 		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
-
 	filteredData := []ServiceUserResponse{}
 	seenServices := make(map[string]bool)
 	for _, service := range services {
@@ -184,7 +183,6 @@ func GetServiceData(c echo.Context) error {
 			if contains(maintenanceServerNumbers, server.Server) {
 				continue
 			}
-
 			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.Name, server.Server, userId)
 			price, _ := strconv.ParseFloat(server.Price, 64)
 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
@@ -295,6 +293,7 @@ func GetUserServiceData(c echo.Context) error {
 			}
 
 			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.Name, server.Server, apiUser.UserID.Hex())
+			logs.Logger.Info(discount)
 			price, _ := strconv.ParseFloat(server.Price, 64)
 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
 
@@ -431,7 +430,7 @@ func contains(arr []int, num int) bool {
 }
 
 func loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDiscountCollection *mongo.Collection, userId string) (map[string]float64, map[int]float64, map[string]float64, error) {
-	// Load service discounts
+	userIdObject, _ := primitive.ObjectIDFromHex(userId)
 	serviceDiscounts := make(map[string]float64)
 	serviceCursor, _ := serviceDiscountCollection.Find(context.Background(), bson.M{})
 	defer serviceCursor.Close(context.Background())
@@ -455,7 +454,6 @@ func loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDisc
 	}
 
 	// Load user discounts if userId is provided
-	userIdObject, _ := primitive.ObjectIDFromHex(userId)
 	userDiscounts := make(map[string]float64)
 	if userId != "" {
 		userCursor, _ := userDiscountCollection.Find(context.Background(), bson.M{"userId": userIdObject})
@@ -463,7 +461,7 @@ func loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDisc
 		for userCursor.Next(context.Background()) {
 			var discount models.UserDiscount
 			if err := userCursor.Decode(&discount); err == nil {
-				key := discount.Service + "_" + discount.Server
+				key := discount.Service + "_" + fmt.Sprintf("%d", discount.Server)
 				userDiscounts[key] = float64(discount.Discount)
 			}
 		}
@@ -476,7 +474,6 @@ func CalculateDiscount(serviceDiscounts map[string]float64, serverDiscounts map[
 	return serviceDiscounts[key] + serverDiscounts[serverNumber] + userDiscounts[key]
 }
 
-// Handler to calculate total recharge amount
 func TotalRecharge(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	rechargeHistoryCol := models.InitializeRechargeHistoryCollection(db)

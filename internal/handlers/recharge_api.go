@@ -314,7 +314,7 @@ func RechargeTrxApi(c echo.Context) error {
 	fromAddress := apiWalletUser.TRXAddress
 	privateKey := apiWalletUser.TRXPrivateKey
 
-	sentUrl := fmt.Sprintf("https://own5k.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
+	sentUrl := fmt.Sprintf("https://php.paidsms.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
 	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {
 		logs.Logger.Error(err)

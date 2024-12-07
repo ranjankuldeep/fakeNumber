@@ -389,9 +389,6 @@ func GetServiceDataAdmin(c echo.Context) error {
 		seenServices[service.Name] = true
 		serverDetails := []ServerDetailAdmin{}
 		for _, server := range service.Servers {
-			if server.Block == true {
-				continue
-			}
 			serviceKey := service.Name + "_" + strconv.Itoa(server.Server)
 			discount := serviceDiscountMap[serviceKey] + serverDiscountMap[server.Server]
 			originalPrice, err := strconv.ParseFloat(server.Price, 64)

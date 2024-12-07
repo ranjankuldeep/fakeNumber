@@ -362,7 +362,6 @@ func GoogleSignup(c echo.Context) error {
 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "User already exists, Please Login."})
 }
 func Login(c echo.Context) error {
-	// Parse request body
 	type LoginRequest struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`

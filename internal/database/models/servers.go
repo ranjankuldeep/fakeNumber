@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -25,11 +24,5 @@ type Server struct {
 // InitializeServerCollection initializes the collection for "servers"
 func InitializeServerCollection(db *mongo.Database) *mongo.Collection {
 	collection := db.Collection("servers")
-
-	// Ensuring the server field is unique by creating an index
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = EnsureIndexes(ctx, collection)
-
 	return collection
 }

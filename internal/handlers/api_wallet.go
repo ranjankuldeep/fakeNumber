@@ -56,7 +56,7 @@ func BalanceHandler(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	walletCol := models.InitializeApiWalletuserCollection(db)
 
-	apiKey := c.QueryParam("api_key")
+	apiKey := c.QueryParam("apikey")
 	if apiKey == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid Api Key"})
 	}
@@ -249,7 +249,7 @@ func UpdateRechargeHandler(c echo.Context) error {
 	}
 
 	host := c.Request().Host
-	protocol := "http"
+	protocol := "https"
 	rechargeHistoryURL := fmt.Sprintf("%s://%s/api/save-recharge-history", protocol, host)
 	rechargeHistoryJSON, _ := json.Marshal(rechargeHistory)
 	req, err := http.NewRequest("POST", rechargeHistoryURL, bytes.NewBuffer(rechargeHistoryJSON))

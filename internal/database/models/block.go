@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -20,8 +19,5 @@ type Block struct {
 // NewBlockCollection initializes and returns the block collection with indexes
 func InitializeBlockCollection(db *mongo.Database) *mongo.Collection {
 	collection := db.Collection("block-users")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = EnsureIndexes(ctx, collection)
 	return collection
 }

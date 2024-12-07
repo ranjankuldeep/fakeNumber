@@ -53,7 +53,6 @@ func AddServer(c echo.Context) error {
 	filter := bson.M{"server": server}
 	existingServer := models.Server{}
 	err = serverCollection.FindOne(context.Background(), filter).Decode(&existingServer)
-
 	if err == nil {
 		// Server exists, update the API key if provided
 		update := bson.M{"$set": bson.M{"api_key": input.APIKey}}
@@ -64,7 +63,7 @@ func AddServer(c echo.Context) error {
 		}
 		log.Printf("INFO: API key updated successfully for server %d\n", server)
 		return c.JSON(http.StatusOK, map[string]string{"message": "API key updated successfully"})
-	} else if err == mongo.ErrNoDocuments {
+	} else if err == mongo.ErrNoDocuments || err == mongo.ErrEmptySlice {
 		// Server doesn't exist, create a new entry
 		newServer := models.Server{
 			ServerNumber: server,
@@ -80,7 +79,6 @@ func AddServer(c echo.Context) error {
 		log.Printf("INFO: Server %d added successfully\n", server)
 		return c.JSON(http.StatusCreated, map[string]string{"message": "Server added successfully"})
 	} else {
-		// Handle unexpected errors
 		log.Println("ERROR: Unexpected error while querying server collection:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}

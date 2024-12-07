@@ -180,7 +180,7 @@ func RechargeUpiApi(c echo.Context) error {
 }
 
 type ResponseStructure struct {
-	Result bool `json:"result"`
+	Status string `json:"status"`
 }
 
 func RechargeTrxApi(c echo.Context) error {
@@ -314,9 +314,7 @@ func RechargeTrxApi(c echo.Context) error {
 	fromAddress := apiWalletUser.TRXAddress
 	privateKey := apiWalletUser.TRXPrivateKey
 
-	sentUrl := fmt.Sprintf("https://php.paidsms.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
-	newClient := &http.Client{Timeout: 10 * time.Second}
-
+	sentUrl := fmt.Sprintf("https://own5k.in/tron/?type=send&from=%s&key=%s&to=%s", fromAddress, privateKey, toAddress)
 	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {
 		logs.Logger.Error(err)
@@ -334,27 +332,27 @@ func RechargeTrxApi(c echo.Context) error {
 		Hash:         hash,
 		IP:           ipDetail,
 	}
-
-	// Make the GET request
-	response, err := newClient.Get(sentUrl)
+	response, err := http.Get(sentUrl)
 	if err != nil {
-		log.Println("Failed to call URL:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "",
-		})
+		log.Fatalf("Failed to call URL: %v", err)
 	}
-	defer resp.Body.Close()
+	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		log.Println("Received non-200 status code:", resp.StatusCode)
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "",
-		})
+		log.Fatalf("Non-200 status code received: %d", response.StatusCode)
 	}
-	var responseData ResponseStructure
 
-	if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
-		log.Println("Failed to unmarshal response:", err)
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Fatalf("Failed to read response body: %v", err)
+	}
+	log.Printf("Raw Response: %s", string(body))
+	var responseData ResponseStructure
+	if err := json.Unmarshal(body, &responseData); err != nil {
+		log.Fatalf("Failed to unmarshal response: %v", err)
+	}
+	logs.Logger.Info(responseData)
+	if responseData.Status == "Fail" {
 		unsendTrx := models.UnsendTrx{
 			Email:         user.Email,
 			TrxAddress:    apiWalletUser.TRXAddress,
@@ -362,7 +360,6 @@ func RechargeTrxApi(c echo.Context) error {
 			CreatedAt:     time.Now(),
 			UpdatedAt:     time.Now(),
 		}
-
 		_, insertErr := unsendTrxColl.InsertOne(context.TODO(), unsendTrx)
 		if insertErr != nil {
 			log.Println("Failed to insert unsend transaction:", insertErr)
@@ -371,6 +368,7 @@ func RechargeTrxApi(c echo.Context) error {
 			})
 		}
 		rechargeDetail.Status = "fail"
+		logs.Logger.Infof("%+v", rechargeDetail)
 		err = services.TrxRechargeTeleBot(rechargeDetail)
 		if err != nil {
 			logs.Logger.Error(err)
@@ -381,6 +379,7 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 	rechargeDetail.Status = "ok"
+	logs.Logger.Infof("%+v", rechargeDetail)
 	err = services.TrxRechargeTeleBot(rechargeDetail)
 	if err != nil {
 		logs.Logger.Error(err)

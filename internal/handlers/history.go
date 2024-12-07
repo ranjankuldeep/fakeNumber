@@ -101,7 +101,6 @@ func GetTransactionHistory(c echo.Context) error {
 	return c.JSON(http.StatusOK, transactionHistoryData)
 }
 
-// Handler to save a recharge history entry
 func SaveRechargeHistory(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	rechargeHistoryCol := models.InitializeRechargeHistoryCollection(db)

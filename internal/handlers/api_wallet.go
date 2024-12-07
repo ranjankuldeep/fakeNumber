@@ -249,7 +249,7 @@ func UpdateRechargeHandler(c echo.Context) error {
 	}
 
 	host := c.Request().Host
-	protocol := "https"
+	protocol := "http"
 	rechargeHistoryURL := fmt.Sprintf("%s://%s/api/save-recharge-history", protocol, host)
 	rechargeHistoryJSON, _ := json.Marshal(rechargeHistory)
 	req, err := http.NewRequest("POST", rechargeHistoryURL, bytes.NewBuffer(rechargeHistoryJSON))

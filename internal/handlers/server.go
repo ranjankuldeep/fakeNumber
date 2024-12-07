@@ -135,66 +135,42 @@ func DeleteServer(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"message": "Server deleted successfully"})
 }
 
-// Update maintenance status for a server
 func MaintainanceServer(c echo.Context) error {
-	// Log the start of the function
-	log.Println("INFO: Starting MaintainanceServer handler")
-
-	// Retrieve the database instance
 	db, ok := c.Get("db").(*mongo.Database)
 	if !ok {
 		log.Println("ERROR: Failed to retrieve database instance from context")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
-	log.Println("INFO: Database instance retrieved successfully")
-
-	// Define a struct to parse the JSON input
 	type RequestBody struct {
 		Server       int  `json:"server"`
 		Maintainance bool `json:"maintainance"`
 	}
 
 	var input RequestBody
-
-	// Bind the JSON input to the struct
-	log.Println("INFO: Binding JSON input from request body")
 	if err := c.Bind(&input); err != nil {
 		log.Println("ERROR: Failed to bind JSON input:", err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid input format"})
 	}
-
-	// Log the received input
-	log.Printf("INFO: Received input - server: %d, maintainance: %t\n", input.Server, input.Maintainance)
-
-	// Initialize the collection
-	serverCollection := db.Collection("servers")
+	serverCollection := models.InitializeServerCollection(db)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if input.Server == 0 {
-		// Update maintenance status for all servers
-		log.Println("INFO: Updating maintenance status for all servers")
 		update := bson.M{"$set": bson.M{"maintainance": input.Maintainance}}
-		result, err := serverCollection.UpdateMany(ctx, bson.M{}, update)
+		_, err := serverCollection.UpdateMany(ctx, bson.M{}, update)
 		if err != nil {
 			log.Println("ERROR: Failed to update maintenance status for all servers:", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 		}
-		log.Printf("INFO: Maintenance status updated for %d servers.\n", result.ModifiedCount)
 		return c.JSON(http.StatusOK, map[string]string{
 			"message": fmt.Sprintf("Maintenance status set to %t for all servers.", input.Maintainance),
 		})
 	}
-
-	// If a specific server number is provided, update that server
 	filter := bson.M{"server": input.Server}
 
-	// Check if the server exists
 	var existingServer bson.M
 	err := serverCollection.FindOne(ctx, filter).Decode(&existingServer)
 	if err == mongo.ErrNoDocuments {
-		// Add a new server if not found
-		log.Println("INFO: Server not found. Adding new server.")
 		_, err := serverCollection.InsertOne(ctx, bson.M{
 			"server":       input.Server,
 			"maintainance": input.Maintainance,
@@ -221,8 +197,6 @@ func MaintainanceServer(c echo.Context) error {
 		log.Println("ERROR: Failed to update maintenance status:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 	}
-
-	log.Printf("INFO: Maintenance status updated successfully for server: %d\n", input.Server)
 	return c.JSON(http.StatusOK, map[string]string{
 		"message":      "Maintenance status updated successfully.",
 		"maintainance": fmt.Sprintf("Server %d is now %t", input.Server, newStatus),

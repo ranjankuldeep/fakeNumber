@@ -118,6 +118,7 @@ func fetchWalletBalance(ctx context.Context, apiWalletCollection *mongo.Collecti
 }
 
 func CheckAndBlockUsers(db *mongo.Database) {
+	logs.Logger.Info("running block users")
 	userCollection := models.InitializeUserCollection(db)
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
@@ -180,34 +181,25 @@ func CheckAndBlockUsers(db *mongo.Database) {
 			_, err = userCollection.UpdateOne(ctx, bson.M{"_id": user.ID}, update)
 			if err != nil {
 				logs.Logger.Errorf("Failed to block user %s: %v", user.ID.Hex(), err)
-			} else {
-				logs.Logger.Infof("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
-				log.Printf("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
-				var ip models.Ip
-				ipCollection := models.InitializeIpCollection(db)
-				err := ipCollection.FindOne(ctx, bson.M{"userId": user.ID}).Decode(&ip)
-				if err != nil {
-					logs.Logger.Error(err)
-					return
-				}
-
-				blockDetails := services.BlockUserDetails{
-					Email:          user.Email,
-					Date:           time.Now().Format("02-01-2006 03:04:05pm"),
-					TotalRecharge:  fmt.Sprintf("%0.2f", totalRecharge),
-					UsedBalance:    fmt.Sprintf("%0.2f", totalTransactionPendingPrice+totalTransactionSuccessPrice),
-					CurrentBalance: fmt.Sprintf("%0.2f", walletBalance),
-					ToBeBalance:    fmt.Sprintf("%0.2f", totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice)),
-					FraudAmount:    fmt.Sprintf("%0.2f", walletBalance-(totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice))),
-					Reason:         fmt.Sprintf("Due to Fraud"),
-				}
-				err = services.UserBlockDetails(blockDetails)
-				if err != nil {
-					logs.Logger.Info("unable to send block details")
-					logs.Logger.Error(err)
-				}
-				logs.Logger.Infof("%+v", blockDetails)
 			}
+			logs.Logger.Infof("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
+			log.Printf("User %s blocked due to balance mismatch (%.4f%% difference)", user.ID.Hex(), balanceDifference)
+			blockDetails := services.BlockUserDetails{
+				Email:          user.Email,
+				Date:           time.Now().Format("02-01-2006 03:04:05pm"),
+				TotalRecharge:  fmt.Sprintf("%0.2f", totalRecharge),
+				UsedBalance:    fmt.Sprintf("%0.2f", totalTransactionPendingPrice+totalTransactionSuccessPrice),
+				CurrentBalance: fmt.Sprintf("%0.2f", walletBalance),
+				ToBeBalance:    fmt.Sprintf("%0.2f", totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice)),
+				FraudAmount:    fmt.Sprintf("%0.2f", walletBalance-(totalRecharge-(totalTransactionPendingPrice+totalTransactionSuccessPrice))),
+				Reason:         fmt.Sprintf("Due to Fraud"),
+			}
+			err = services.UserBlockDetails(blockDetails)
+			if err != nil {
+				logs.Logger.Info("unable to send block details")
+				logs.Logger.Error(err)
+			}
+			logs.Logger.Infof("%+v", blockDetails)
 		}
 	}
 }

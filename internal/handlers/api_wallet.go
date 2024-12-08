@@ -249,7 +249,7 @@ func UpdateRechargeHandler(c echo.Context) error {
 	}
 
 	host := c.Request().Host
-	protocol := "http"
+	protocol := "https"
 	rechargeHistoryURL := fmt.Sprintf("%s://%s/api/save-recharge-history", protocol, host)
 	rechargeHistoryJSON, _ := json.Marshal(rechargeHistory)
 	req, err := http.NewRequest("POST", rechargeHistoryURL, bytes.NewBuffer(rechargeHistoryJSON))
@@ -258,7 +258,6 @@ func UpdateRechargeHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create recharge history request"})
 	}
 	req.Header.Set("Content-Type", "application/json")
-
 	logs.Logger.Infof("Sending recharge history request to URL: %s", rechargeHistoryURL)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)

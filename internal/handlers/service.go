@@ -1042,9 +1042,8 @@ func HandleNumberCancel(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-
-	// 2. Update the balance
-	// Update the status to "CANCELLED" for the existing document
+	logs.Logger.Infof("Updated balance for id %+v", id)
+	// 2. Update the status to "CANCELLED" for the existing document
 	transactionUpdateFilter := bson.M{"id": id, "server": server}
 	transactionpdate := bson.M{
 		"$set": bson.M{

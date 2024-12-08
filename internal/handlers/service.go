@@ -905,9 +905,7 @@ func HandleNumberCancel(c echo.Context) error {
 
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	sererCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err := serverCollection.FindOne(sererCtx, bson.M{"server": 0}).Decode(&server0)
+	err := serverCollection.FindOne(context.TODO(), bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -917,9 +915,7 @@ func HandleNumberCancel(c echo.Context) error {
 
 	var apiWalletUser models.ApiWalletUser
 	apiWalletColl := models.InitializeApiWalletuserCollection(db)
-	apiWalletCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = apiWalletColl.FindOne(apiWalletCtx, bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
+	err = apiWalletColl.FindOne(context.TODO(), bson.M{"api_key": apiKey}).Decode(&apiWalletUser)
 	if err != nil || err == mongo.ErrEmptySlice {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid api key"})
@@ -937,9 +933,7 @@ func HandleNumberCancel(c echo.Context) error {
 
 	var existingOrder models.Order
 	orderCollection := models.InitializeOrderCollection(db)
-	orderCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = orderCollection.FindOne(orderCtx, bson.M{"numberId": id}).Decode(&existingOrder)
+	err = orderCollection.FindOne(context.TODO(), bson.M{"numberId": id}).Decode(&existingOrder)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"errror": "number already cancelled"})
 	}
@@ -986,9 +980,7 @@ func HandleNumberCancel(c echo.Context) error {
 		"id":     id,
 		"server": server,
 	}
-	transactionCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = transactionCollection.FindOne(transactionCtx, filter).Decode(&transactionData)
+	err = transactionCollection.FindOne(context.TODO(), filter).Decode(&transactionData)
 	if err == mongo.ErrEmptySlice || err == mongo.ErrNoDocuments {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid server"})
 	}
@@ -997,9 +989,7 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_FETCH_TRANSACTION_HISTORY_DATA"})
 	}
 
-	orderUpdateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err = orderCollection.DeleteOne(orderUpdateCtx, bson.M{"numberId": id})
+	_, err = orderCollection.DeleteOne(context.TODO(), bson.M{"numberId": id})
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_NOT_FOUND"})
@@ -1028,15 +1018,14 @@ func HandleNumberCancel(c echo.Context) error {
 
 	formattedData := FormatDateTime()
 	var transaction models.TransactionHistory
-	transacCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = transactionCollection.FindOne(transacCtx, bson.M{"id": id}).Decode(&transaction)
+	err = transactionCollection.FindOne(context.TODO(), bson.M{"id": id}).Decode(&transaction)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	// 1. Handle the balance update first
+	logs.Logger.Infof("handled request %+v", id)
 	price, err := strconv.ParseFloat(transaction.Price, 64)
 	if err != nil {
 		logs.Logger.Error(err)
@@ -1048,9 +1037,7 @@ func HandleNumberCancel(c echo.Context) error {
 		"$inc": bson.M{"balance": price},
 	}
 	balanceFilter := bson.M{"userId": apiWalletUser.UserID}
-	apiWallCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err = apiWalletColl.UpdateOne(apiWallCtx, balanceFilter, balanceUpdate)
+	_, err = apiWalletColl.UpdateOne(context.TODO(), balanceFilter, balanceUpdate)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1065,9 +1052,7 @@ func HandleNumberCancel(c echo.Context) error {
 			"date_time": formattedData,
 		},
 	}
-	updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err = transactionCollection.UpdateOne(updateCtx, transactionUpdateFilter, transactionpdate)
+	_, err = transactionCollection.UpdateOne(context.TODO(), transactionUpdateFilter, transactionpdate)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

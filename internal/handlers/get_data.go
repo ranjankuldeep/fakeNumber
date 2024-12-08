@@ -92,7 +92,7 @@ type ServerDetail struct {
 	Server string `json:"serverNumber"`
 	Price  string `json:"price"`
 	Code   string `json:"code"`
-	Otp    string `json:"otp"`
+	Otp    string `json:"otptype"`
 }
 
 type ServerDetailAdmin struct {
@@ -296,12 +296,17 @@ func GetUserServiceData(c echo.Context) error {
 			logs.Logger.Info(discount)
 			price, _ := strconv.ParseFloat(server.Price, 64)
 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
-
+			otpType := "unknown"
+			if strings.Contains(server.Otp, "Single") {
+				otpType = "single"
+			} else if strings.Contains(server.Otp, "Multiple") {
+				otpType = "multiple"
+			}
 			serverDetails = append(serverDetails, ServerDetail{
 				Server: strconv.Itoa(server.Server),
 				Price:  adjustedPrice,
 				Code:   server.Code,
-				Otp:    server.Otp,
+				Otp:    otpType,
 			})
 		}
 		sort.Slice(serverDetails, func(i, j int) bool {

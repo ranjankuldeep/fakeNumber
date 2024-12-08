@@ -1091,9 +1091,7 @@ func HandleNumberCancel(c echo.Context) error {
 	err = services.NumberCancelDetails(cancelDetail)
 	if err != nil {
 		logs.Logger.Error(err)
-		logs.Logger.Error("Unable to send message")
 	}
-	services.NumberCancelDetails(cancelDetail)
 	return c.JSON(http.StatusOK, map[string]string{"status": "success"})
 }
 

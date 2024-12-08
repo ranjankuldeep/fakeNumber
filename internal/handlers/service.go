@@ -198,15 +198,33 @@ func HandleGetNumberRequest(c echo.Context) error {
 
 	newBalance := apiWalletUser.Balance - price
 	roundedBalance := math.Round(newBalance*100) / 100
-
 	roundedPrice := math.Round(price*100) / 100
-	_, err = apiWalletUserCollection.UpdateOne(
-		ctx,
-		bson.M{"userId": user.ID},
-		bson.M{"$inc": bson.M{"balance": -roundedPrice}},
-	)
-	if err != nil {
-		logs.Logger.Error("Failed to decrement balance:", err)
+
+	maxRetries := 3
+	retryCount := 0
+	for retryCount < maxRetries {
+		updateResult, err := apiWalletUserCollection.UpdateOne(
+			ctx,
+			bson.M{"userId": user.ID},
+			bson.M{"$inc": bson.M{"balance": -roundedPrice}},
+		)
+		if err != nil {
+			logs.Logger.Error("Failed to decrement balance (attempt", retryCount+1, "):", err)
+			retryCount++
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		if updateResult.ModifiedCount == 0 {
+			logs.Logger.Warn("Balance update resulted in no changes (attempt", retryCount+1, ")")
+			retryCount++
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+
+	if retryCount == maxRetries {
+		logs.Logger.Error("Failed to decrement balance after", maxRetries, "attempts")
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 

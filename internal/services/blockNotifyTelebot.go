@@ -32,7 +32,6 @@ func UserBlockDetails(blockInfo BlockUserDetails) error {
 	result += fmt.Sprintf("Current Balance => %s\n\n", blockInfo.CurrentBalance)
 	result += fmt.Sprintf("Fraud Amount => %s\n\n", blockInfo.FraudAmount)
 	result += fmt.Sprintf("Reason => %s\n\n", blockInfo.Reason)
-	result += fmt.Sprintf("IP Details => \n%s\n\n", blockInfo.IpDetails)
 	err := sendBlockMessage(result)
 	if err != nil {
 		return err

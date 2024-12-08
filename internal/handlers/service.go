@@ -198,8 +198,15 @@ func HandleGetNumberRequest(c echo.Context) error {
 
 	newBalance := apiWalletUser.Balance - price
 	roundedBalance := math.Round(newBalance*100) / 100
-	_, err = apiWalletUserCollection.UpdateOne(ctx, bson.M{"userId": user.ID}, bson.M{"$set": bson.M{"balance": roundedBalance}})
+
+	roundedPrice := math.Round(price*100) / 100
+	_, err = apiWalletUserCollection.UpdateOne(
+		ctx,
+		bson.M{"userId": user.ID},
+		bson.M{"$inc": bson.M{"balance": -roundedPrice}},
+	)
 	if err != nil {
+		logs.Logger.Error("Failed to decrement balance:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
@@ -247,7 +254,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 	logs.Logger.Info(numData.Id, numData.Number)
-
 	if numData.Id == "" || numData.Number == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 	}

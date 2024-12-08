@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"time"
 
@@ -163,7 +164,7 @@ func SaveRechargeHistory(c echo.Context) error {
 		log.Printf("[INFO] Updating balance for userId: %s with amount: %.2f\n", request.UserID, requestAmountFloat)
 		_, err := apiWalletCol.UpdateOne(ctx,
 			bson.M{"userId": userObjectID},
-			bson.M{"$inc": bson.M{"balance": fmt.Sprintf("%.2f", requestAmountFloat)}},
+			bson.M{"$inc": bson.M{"balance": math.Round(requestAmountFloat*100) / 100}},
 		)
 		if err != nil {
 			log.Println("[ERROR] Failed to update user balance:", err)

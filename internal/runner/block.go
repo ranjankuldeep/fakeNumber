@@ -118,7 +118,6 @@ func fetchWalletBalance(ctx context.Context, apiWalletCollection *mongo.Collecti
 }
 
 func CheckAndBlockUsers(db *mongo.Database) {
-	logs.Logger.Info("running block users")
 	userCollection := models.InitializeUserCollection(db)
 	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
 	transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)

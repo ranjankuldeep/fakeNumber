@@ -191,7 +191,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
-	logs.Logger.Info(fmt.Sprintf("url-%s", apiURLRequest.URL))
 	numData, err := ExtractNumber(server, apiURLRequest)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1037,6 +1036,27 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
+	// 1. Handle the balance update first
+	price, err := strconv.ParseFloat(transaction.Price, 64)
+	if err != nil {
+		logs.Logger.Error(err)
+	}
+	newBalance := apiWalletUser.Balance + price
+	newBalance = math.Round(newBalance*100) / 100
+	price = math.Round(price*100) / 100
+	balanceUpdate := bson.M{
+		"$inc": bson.M{"balance": price},
+	}
+	balanceFilter := bson.M{"userId": apiWalletUser.UserID}
+	apiWallCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = apiWalletColl.UpdateOne(apiWallCtx, balanceFilter, balanceUpdate)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// 2. Update the balance
 	// Update the status to "CANCELLED" for the existing document
 	transactionUpdateFilter := bson.M{"id": id, "server": server}
 	transactionpdate := bson.M{
@@ -1048,26 +1068,6 @@ func HandleNumberCancel(c echo.Context) error {
 	updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_, err = transactionCollection.UpdateOne(updateCtx, transactionUpdateFilter, transactionpdate)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-
-	price, err := strconv.ParseFloat(transaction.Price, 64)
-	if err != nil {
-		logs.Logger.Error(err)
-	}
-	newBalance := apiWalletUser.Balance + price
-	newBalance = math.Round(newBalance*100) / 100
-
-	balanceUpdate := bson.M{
-		"$set": bson.M{"balance": newBalance},
-	}
-	balanceFilter := bson.M{"userId": apiWalletUser.UserID}
-
-	apiWallCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err = apiWalletColl.UpdateOne(apiWallCtx, balanceFilter, balanceUpdate)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

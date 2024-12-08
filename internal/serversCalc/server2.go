@@ -20,9 +20,7 @@ type Response struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// FetchNumber fetches the number and ID from the API
 func ExtractNumberServer2(url string, headers map[string]string) (string, string, error) {
-	logs.Logger.Info(url, headers)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", "", err

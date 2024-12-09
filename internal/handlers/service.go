@@ -254,7 +254,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 			logs.Logger.Error("Failed to insert transaction history:", err)
 			return nil, err
 		}
-
 		return nil, nil
 	})
 
@@ -1198,7 +1197,8 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
 	responseData := string(body)
-	logs.Logger.Info(responseData)
+	logs.Logger.Infof("Number Cancel Response %+v", responseData)
+
 	if strings.TrimSpace(responseData) == "" {
 		return errors.New("RECEIVED_EMTPY_RESPONSE_FROM_THIRD_PARTY_SERVER")
 	}
@@ -1210,6 +1210,8 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		} else if strings.HasPrefix(responseData, "ACCESS_APPROVED") {
 			return nil
 		} else if strings.HasPrefix(responseData, "ACCESS_CANCEL_ALREADY") {
+			return nil
+		} else if strings.HasPrefix(responseData, "STATUS_CANCEL") {
 			return nil
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
@@ -1243,27 +1245,35 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		} else if strings.HasPrefix(responseData, "EARLY_CANCEL_DENIED") {
 			return errors.New("EARLY_CANCEL_DENIED")
 		} else if strings.HasPrefix(responseData, "BAD_STATUS") {
-			return nil
+			return errors.New("BAD_STATUS")
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
 	case "5":
-		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_ACTION") {
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
+		} else if strings.HasPrefix(responseData, "BAD_ACTION") {
+			return errors.New("BAD_ACTION")
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
 	case "6":
-		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "NO_ACTIVATION") {
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
+		} else if strings.HasPrefix(responseData, "NO_ACTIVATION") {
+			return errors.New("NO_ACTIVATION")
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	case "8":
-		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_STATUS") {
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
+		} else if strings.HasPrefix(responseData, "BAD_STATUS") {
+			return errors.New("BAD_STATUS")
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	case "7":
-		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "BAD_STATUS") {
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
+		} else if strings.HasPrefix(responseData, "BAD_STATUS") {
+			return errors.New("BAD_STATUS")
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	case "9":
@@ -1272,7 +1282,7 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	case "10":
-		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "ACCESS_CANCEL") {
+		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
 		}
 		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
@@ -1287,11 +1297,10 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		} else if responseDataJSON["error_code"] == "change_status" {
 			return nil
 		}
-		errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
 	default:
 		return errors.New("INVALID_SERVER_VALUE")
 	}
-	return nil
 }
 
 func getServerDataWithMaintenanceCheck(db *mongo.Database, server string) (models.Server, error) {

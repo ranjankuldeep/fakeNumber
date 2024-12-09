@@ -254,7 +254,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 				time.Sleep(retryInterval)
 				continue
 			}
-
 			logs.Logger.Info("Transaction history successfully created for user", apiWalletUser.UserID, "on attempt", retryCount+1)
 			break
 		}
@@ -265,12 +264,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		logs.Logger.Error("Transaction failed:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-
 	logs.Logger.Info("Successfully updated balance and created transaction history.")
-	return c.JSON(http.StatusOK, map[string]string{"message": "Transaction completed successfully"})
-
-	return c.JSON(http.StatusOK, map[string]string{"message": "Transaction completed successfully"})
-
 	var expirationTime time.Time
 	switch server {
 	case "1", "2", "3", "4", "5", "6", "8", "9", "10", "11":

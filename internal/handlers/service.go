@@ -1090,16 +1090,34 @@ func HandleNumberCancel(c echo.Context) error {
 
 	// 2. Update the status to "CANCELLED" for the existing document
 	transactionUpdateFilter := bson.M{"id": id, "server": server}
-	transactionpdate := bson.M{
+	transactionUpdate := bson.M{
 		"$set": bson.M{
 			"status":    "CANCELLED",
 			"date_time": formattedData,
 		},
 	}
-	_, err = transactionCollection.UpdateOne(context.TODO(), transactionUpdateFilter, transactionpdate)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		result, err := transactionCollection.UpdateOne(context.TODO(), transactionUpdateFilter, transactionUpdate)
+		if err != nil {
+			logs.Logger.Errorf("Attempt %d: Error updating transaction: %v", attempt, err)
+			if attempt < maxRetries {
+				time.Sleep(retryInterval) // Wait before retrying
+				continue
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		if result.ModifiedCount == 1 {
+			logs.Logger.Infof("Transaction successfully updated for ID %s on attempt %d", id, attempt)
+			break
+		} else {
+			logs.Logger.Warnf("Attempt %d: No document modified for ID %s with filter %v", attempt, id, transactionUpdateFilter)
+			if attempt < maxRetries {
+				time.Sleep(retryInterval) // Wait before retrying
+				continue
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "No document modified after multiple retries"})
+		}
 	}
 
 	ipDetail, err := utils.ExtractIpDetails(c)

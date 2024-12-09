@@ -999,10 +999,10 @@ func HandleNumberCancel(c echo.Context) error {
 		}
 	}
 
-	timeDifference := time.Now().Sub(existingOrder.OrderTime)
-	if timeDifference < 2*time.Minute {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "wait 2 mints before cancel"})
-	}
+	// timeDifference := time.Now().Sub(existingOrder.OrderTime)
+	// if timeDifference < 2*time.Minute {
+	// 	return c.JSON(http.StatusBadRequest, map[string]string{"error": "wait 2 mints before cancel"})
+	// }
 
 	serverData, err := getServerDataWithMaintenanceCheck(db, server)
 	if err != nil {

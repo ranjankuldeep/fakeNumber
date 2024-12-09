@@ -1061,12 +1061,33 @@ func HandleNumberCancel(c echo.Context) error {
 		"$inc": bson.M{"balance": price},
 	}
 	balanceFilter := bson.M{"userId": apiWalletUser.UserID}
-	_, err = apiWalletColl.UpdateOne(context.TODO(), balanceFilter, balanceUpdate)
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	const maxRetries = 3
+	const retryInterval = time.Second * 1
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		result, err := apiWalletColl.UpdateOne(context.TODO(), balanceFilter, balanceUpdate)
+		if err != nil {
+			logs.Logger.Errorf("Attempt %d: Error updating balance: %v", attempt, err)
+			if attempt < maxRetries {
+				time.Sleep(retryInterval)
+				continue
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		if result.ModifiedCount == 1 {
+			logs.Logger.Infof("Balance successfully updated for user %s after %d attempt(s)", apiWalletUser.UserID, attempt)
+			break
+		} else {
+			logs.Logger.Warnf("Attempt %d: No document modified for user %s", attempt, apiWalletUser.UserID)
+			if attempt < maxRetries {
+				time.Sleep(retryInterval) // Wait before retrying
+				continue
+			}
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "No document modified after multiple retries"})
+		}
 	}
 	logs.Logger.Infof("Updated balance for id %+v", id)
+
 	// 2. Update the status to "CANCELLED" for the existing document
 	transactionUpdateFilter := bson.M{"id": id, "server": server}
 	transactionpdate := bson.M{

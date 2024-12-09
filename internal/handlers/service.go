@@ -206,11 +206,11 @@ func HandleGetNumberRequest(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to start transaction session"})
 	}
 	defer session.EndSession(context.Background())
-
 	_, err = session.WithTransaction(context.Background(), func(sc mongo.SessionContext) (interface{}, error) {
-		maxRetries := 3
-		retryCount := 0
-		for retryCount < maxRetries {
+		const maxRetries = 3
+		const retryInterval = 2 * time.Second
+
+		for retryCount := 0; retryCount < maxRetries; retryCount++ {
 			updateResult, err := apiWalletUserCollection.UpdateOne(
 				sc,
 				bson.M{"userId": user.ID},
@@ -218,24 +218,21 @@ func HandleGetNumberRequest(c echo.Context) error {
 			)
 			if err != nil {
 				logs.Logger.Error("Failed to decrement balance (attempt", retryCount+1, "):", err)
-				retryCount++
-				time.Sleep(2 * time.Second)
+				time.Sleep(retryInterval)
 				continue
 			}
-			if updateResult.ModifiedCount == 0 {
+
+			if updateResult.ModifiedCount == 1 {
+				logs.Logger.Info("Balance successfully decremented for user", user.ID, "on attempt", retryCount+1)
+				break
+			} else {
 				logs.Logger.Warn("Balance update resulted in no changes (attempt", retryCount+1, ")")
-				retryCount++
-				time.Sleep(1 * time.Second)
+				time.Sleep(retryInterval)
 				continue
 			}
-			break
 		}
 
-		if retryCount == maxRetries {
-			logs.Logger.Error("Failed to decrement balance after", maxRetries, "attempts")
-			return nil, errors.New("failed to decrement balance after multiple retries")
-		}
-		transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
+		transctionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
 		transaction := models.TransactionHistory{
 			UserID:        apiWalletUser.UserID.Hex(),
 			Service:       serviceName,
@@ -249,10 +246,17 @@ func HandleGetNumberRequest(c echo.Context) error {
 			DateTime:      time.Now().In(time.FixedZone("IST", 5*3600+30*60)).Format("2006-01-02T15:04:05"),
 			CreatedAt:     time.Now(),
 		}
-		_, err = transactionHistoryCollection.InsertOne(sc, transaction)
-		if err != nil {
-			logs.Logger.Error("Failed to insert transaction history:", err)
-			return nil, err
+
+		for retryCount := 0; retryCount < maxRetries; retryCount++ {
+			_, err := transctionHistoryCollection.InsertOne(sc, transaction)
+			if err != nil {
+				logs.Logger.Error("Failed to insert transaction history (attempt", retryCount+1, "):", err)
+				time.Sleep(retryInterval)
+				continue
+			}
+
+			logs.Logger.Info("Transaction history successfully created for user", apiWalletUser.UserID, "on attempt", retryCount+1)
+			break
 		}
 		return nil, nil
 	})
@@ -261,7 +265,12 @@ func HandleGetNumberRequest(c echo.Context) error {
 		logs.Logger.Error("Transaction failed:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+
 	logs.Logger.Info("Successfully updated balance and created transaction history.")
+	return c.JSON(http.StatusOK, map[string]string{"message": "Transaction completed successfully"})
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Transaction completed successfully"})
+
 	var expirationTime time.Time
 	switch server {
 	case "1", "2", "3", "4", "5", "6", "8", "9", "10", "11":

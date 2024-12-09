@@ -250,7 +250,7 @@ func hashOTP(otp string) string {
 }
 
 func storeOTP(email string, otp string) error {
-	db, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb+srv://paidsms:11dce015@cluster0.g7wa6.mongodb.net/paidsms?retryWrites=true&w=majority&appName=Cluster0"))
+	db, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb+srv://paidsms:11dce015@paidsmsnew.bjtzwk2.mongodb.net/paidsmsnew?retryWrites=true&w=majority&appName=paidsmsnew"))
 	if err != nil {
 		log.Println("ERROR: Failed to connect to MongoDB:", err)
 		return err

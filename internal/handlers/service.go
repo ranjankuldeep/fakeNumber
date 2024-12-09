@@ -1078,13 +1078,11 @@ func HandleNumberCancel(c echo.Context) error {
 		const maxRetries = 3
 		const retryInterval = time.Second * 2
 
-		// Retry logic for balance update
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			balanceUpdate := bson.M{
 				"$inc": bson.M{"balance": price},
 			}
 			balanceFilter := bson.M{"userId": apiWalletUser.UserID}
-
 			balanceResult, err := apiWalletColl.UpdateOne(sc, balanceFilter, balanceUpdate)
 			if err != nil {
 				logs.Logger.Errorf("Attempt %d: Error updating balance: %v", attempt, err)

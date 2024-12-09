@@ -1064,47 +1064,82 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to start transaction session"})
 	}
 	defer session.EndSession(context.Background())
+
 	_, err = session.WithTransaction(context.Background(), func(sc mongo.SessionContext) (interface{}, error) {
-		// 1. Update the balance
-		balanceUpdate := bson.M{
-			"$inc": bson.M{"balance": price},
-		}
-		balanceFilter := bson.M{"userId": apiWalletUser.UserID}
+		const maxRetries = 3
+		const retryInterval = time.Second * 2
 
-		balanceResult, err := apiWalletColl.UpdateOne(sc, balanceFilter, balanceUpdate)
-		if err != nil {
-			logs.Logger.Error("Error updating balance:", err)
-			return nil, err
+		// Retry logic for balance update
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			balanceUpdate := bson.M{
+				"$inc": bson.M{"balance": price},
+			}
+			balanceFilter := bson.M{"userId": apiWalletUser.UserID}
+
+			balanceResult, err := apiWalletColl.UpdateOne(sc, balanceFilter, balanceUpdate)
+			if err != nil {
+				logs.Logger.Errorf("Attempt %d: Error updating balance: %v", attempt, err)
+				if attempt < maxRetries {
+					time.Sleep(retryInterval)
+					continue
+				}
+				return nil, err
+			}
+
+			if balanceResult.ModifiedCount == 1 {
+				logs.Logger.Infof("Balance successfully updated for user %s after %d attempt(s)", apiWalletUser.UserID, attempt)
+				break
+			} else {
+				logs.Logger.Warnf("Attempt %d: No document modified for user %s", attempt, apiWalletUser.UserID)
+				if attempt < maxRetries {
+					time.Sleep(retryInterval)
+					continue
+				}
+				return nil, errors.New("failed to update balance after multiple retries")
+			}
 		}
 
-		if balanceResult.ModifiedCount != 1 {
-			logs.Logger.Warn("No balance updated for user:", apiWalletUser.UserID)
-			return nil, errors.New("failed to update balance")
-		}
-		logs.Logger.Infof("Balance successfully updated for user %s", apiWalletUser.UserID)
+		// Retry logic for transaction status update
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			transactionUpdateFilter := bson.M{"id": id, "server": server}
+			transactionUpdate := bson.M{
+				"$set": bson.M{
+					"status":    "CANCELLED",
+					"date_time": formattedData,
+				},
+			}
 
-		// 2. Update the transaction status
-		transactionUpdateFilter := bson.M{"id": id, "server": server}
-		transactionUpdate := bson.M{
-			"$set": bson.M{
-				"status":    "CANCELLED",
-				"date_time": formattedData,
-			},
+			transactionResult, err := transactionCollection.UpdateOne(sc, transactionUpdateFilter, transactionUpdate)
+			if err != nil {
+				logs.Logger.Errorf("Attempt %d: Error updating transaction status: %v", attempt, err)
+				if attempt < maxRetries {
+					time.Sleep(retryInterval)
+					continue
+				}
+				return nil, err
+			}
+
+			if transactionResult.ModifiedCount == 1 {
+				logs.Logger.Infof("Transaction successfully updated for ID %s after %d attempt(s)", id, attempt)
+				break
+			} else {
+				logs.Logger.Warnf("Attempt %d: No document modified for ID %s with filter %v", attempt, id, transactionUpdateFilter)
+				if attempt < maxRetries {
+					time.Sleep(retryInterval)
+					continue
+				}
+				return nil, errors.New("failed to update transaction status after multiple retries")
+			}
 		}
 
-		transactionResult, err := transactionCollection.UpdateOne(sc, transactionUpdateFilter, transactionUpdate)
-		if err != nil {
-			logs.Logger.Error("Error updating transaction status:", err)
-			return nil, err
-		}
-
-		if transactionResult.ModifiedCount != 1 {
-			logs.Logger.Warn("No transaction updated for ID:", id)
-			return nil, errors.New("failed to update transaction status")
-		}
-		logs.Logger.Infof("Transaction successfully updated for ID %s", id)
 		return nil, nil
 	})
+
+	if err != nil {
+		logs.Logger.Error("Transaction failed:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	logs.Logger.Infof("Successfully updated balance and transaction status for ID %s", id)
 
 	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {

@@ -1029,12 +1029,6 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "FAILED_TO_FETCH_TRANSACTION_HISTORY_DATA"})
 	}
 
-	_, err = orderCollection.DeleteOne(context.TODO(), bson.M{"numberId": id})
-	if err != nil {
-		logs.Logger.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_NOT_FOUND"})
-	}
-
 	otpArrived := false
 	if len(transactionData.OTP) != 0 {
 		otpArrived = true
@@ -1153,6 +1147,12 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	logs.Logger.Infof("Successfully updated balance and transaction status for ID %s", id)
+
+	_, err = orderCollection.DeleteOne(context.TODO(), bson.M{"numberId": id})
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "ORDER_NOT_FOUND"})
+	}
 
 	ipDetail, err := utils.ExtractIpDetails(c)
 	if err != nil {

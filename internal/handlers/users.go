@@ -257,7 +257,7 @@ func storeOTP(email string, otp string) error {
 	}
 	defer db.Disconnect(context.Background())
 
-	otpCollection := db.Database("paidsms").Collection("otp")
+	otpCollection := db.Database("paidsmsnew").Collection("otp")
 	hashedOTP := hashOTP(otp)
 	filter := bson.M{"email": email}
 

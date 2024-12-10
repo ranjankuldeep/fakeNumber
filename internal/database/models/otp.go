@@ -6,6 +6,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // OTP represents the structure of an OTP document
@@ -20,23 +21,21 @@ type OTP struct {
 // InitializeVerifyOTPCollection initializes the collection for "verifyOtp"
 func InitializeVerifyOTPCollection(db *mongo.Database) *mongo.Collection {
 	collection := db.Collection("verifyOtp")
-
-	// Ensuring the email field is unique
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = EnsureIndexes(ctx, collection)
-
 	return collection
 }
 
 // InitializeForgotOTPCollection initializes the collection for "forgotOtp"
 func InitializeForgotOTPCollection(db *mongo.Database) *mongo.Collection {
 	collection := db.Collection("forgototps")
-
-	// Ensuring the email field is unique
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = EnsureIndexes(ctx, collection)
-
 	return collection
+}
+
+// EnsureIndexes ensures the necessary indexes are created on the collection
+func EnsureIndexes(ctx context.Context, collection *mongo.Collection) error {
+	indexModel := mongo.IndexModel{
+		Keys:    map[string]interface{}{"userId": 1},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err := collection.Indexes().CreateOne(ctx, indexModel)
+	return err
 }

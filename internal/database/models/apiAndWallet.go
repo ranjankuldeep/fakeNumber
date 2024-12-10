@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -21,22 +22,57 @@ type ApiWalletUser struct {
 	UpdatedAt     time.Time          `bson:"updatedAt,omitempty"`
 }
 
-// EnsureIndexes ensures the necessary indexes are created on the collection
-func EnsureIndexes(ctx context.Context, collection *mongo.Collection) error {
+func EnsureIndexesApi(ctx context.Context, db *mongo.Database, collectionName string) error {
+	// Define validation schema
+	validator := bson.M{
+		"$jsonSchema": bson.M{
+			"bsonType": "object",
+			"required": []string{"balance"},
+			"properties": bson.M{
+				"balance": bson.M{
+					"bsonType":    "double",
+					"minimum":     0.01,
+					"description": "Balance must be a positive number greater than 0",
+				},
+			},
+		},
+	}
+
+	// Check if the collection already exists
+	collections, err := db.ListCollectionNames(ctx, bson.M{"name": collectionName})
+	if err != nil {
+		return err
+	}
+	if len(collections) == 0 {
+		// Create the collection with validation if it doesn't exist
+		err = db.CreateCollection(ctx, collectionName, options.CreateCollection().SetValidator(validator))
+		if err != nil {
+			return err
+		}
+	}
+
+	// Define and create unique index for userId
+	collection := db.Collection(collectionName)
 	indexModel := mongo.IndexModel{
-		Keys:    map[string]interface{}{"userId": 1},
+		Keys:    bson.M{"userId": 1},
 		Options: options.Index().SetUnique(true),
 	}
-	_, err := collection.Indexes().CreateOne(ctx, indexModel)
+	_, err = collection.Indexes().CreateOne(ctx, indexModel)
 	return err
 }
 
-// NewApiWalletUserCollection initializes the collection with indexes if needed
 func InitializeApiWalletuserCollection(db *mongo.Database) *mongo.Collection {
-	collection := db.Collection("apikey_and_balances")
+	const collectionName = "apikey_and_balances"
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_ = EnsureIndexes(ctx, collection)
-	return collection
+	// Ensure validation and indexes
+	err := EnsureIndexesApi(ctx, db, collectionName)
+	if err != nil {
+		panic("Failed to ensure indexes and validation rules: " + err.Error())
+	}
+
+	// Return the collection reference
+	return db.Collection(collectionName)
 }

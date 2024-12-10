@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -20,8 +19,5 @@ type ServerDiscount struct {
 // InitializeServerDiscountCollection initializes the 'server-discount' collection and sets up indexes
 func InitializeServerDiscountCollection(db *mongo.Database) *mongo.Collection {
 	collection := db.Collection("server-discounts")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = EnsureIndexes(ctx, collection)
 	return collection
 }

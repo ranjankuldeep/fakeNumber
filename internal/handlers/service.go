@@ -207,33 +207,15 @@ func HandleGetNumberRequest(c echo.Context) error {
 	}
 	defer session.EndSession(context.Background())
 	_, err = session.WithTransaction(context.Background(), func(sc mongo.SessionContext) (interface{}, error) {
-		maxRetries := 3
-		retryCount := 0
-		for retryCount < maxRetries {
-			updateResult, err := apiWalletUserCollection.UpdateOne(
-				sc,
-				bson.M{"userId": user.ID},
-				bson.M{"$inc": bson.M{"balance": -roundedPrice}},
-			)
-			if err != nil {
-				logs.Logger.Error("Failed to decrement balance (attempt", retryCount+1, "):", err)
-				retryCount++
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			if updateResult.ModifiedCount == 0 {
-				logs.Logger.Warn("Balance update resulted in no changes (attempt", retryCount+1, ")")
-				retryCount++
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			break
+		_, err := apiWalletUserCollection.UpdateOne(
+			sc,
+			bson.M{"userId": user.ID},
+			bson.M{"$inc": bson.M{"balance": -roundedPrice}},
+		)
+		if err != nil {
+			time.Sleep(2 * time.Second)
 		}
 
-		// if retryCount == maxRetries {
-		// 	logs.Logger.Error("Failed to decrement balance after", maxRetries, "attempts")
-		// 	return nil, errors.New("failed to decrement balance after multiple retries")
-		// }
 		transactionHistoryCollection := models.InitializeTransactionHistoryCollection(db)
 		transaction := models.TransactionHistory{
 			UserID:        apiWalletUser.UserID.Hex(),
@@ -250,7 +232,6 @@ func HandleGetNumberRequest(c echo.Context) error {
 		}
 		_, err = transactionHistoryCollection.InsertOne(sc, transaction)
 		if err != nil {
-			logs.Logger.Error("Failed to insert transaction history:", err)
 			return nil, err
 		}
 		return nil, nil
@@ -260,7 +241,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		logs.Logger.Error("Transaction failed:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-	logs.Logger.Info("Successfully updated balance and created transaction history.")
+
 	var expirationTime time.Time
 	switch server {
 	case "1", "2", "3", "4", "5", "6", "8", "9", "10", "11":
@@ -286,7 +267,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-	logs.Logger.Info(numData.Id, numData.Number)
+
 	if numData.Id == "" || numData.Number == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "no stock"})
 	}
@@ -306,10 +287,10 @@ func HandleGetNumberRequest(c echo.Context) error {
 		Number:      numData.Number,
 		Ip:          ipDetail,
 	}
+
 	err = services.NumberGetDetails(numberDetails)
 	if err != nil {
-		logs.Logger.Error(err)
-		logs.Logger.Info("Number details send failed")
+		logs.Logger.Info("Number Details Send Failed")
 	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "id": numData.Id, "number": numData.Number})
 }
@@ -1073,78 +1054,42 @@ func HandleNumberCancel(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to start transaction session"})
 	}
 	defer session.EndSession(context.Background())
+
 	_, err = session.WithTransaction(context.Background(), func(sc mongo.SessionContext) (interface{}, error) {
-		const maxRetries = 3
-		const retryInterval = time.Second * 2
-
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			balanceUpdate := bson.M{
-				"$inc": bson.M{"balance": price},
-			}
-			balanceFilter := bson.M{"userId": apiWalletUser.UserID}
-			balanceResult, err := apiWalletColl.UpdateOne(sc, balanceFilter, balanceUpdate)
-			if err != nil {
-				logs.Logger.Errorf("Attempt %d: Error updating balance: %v", attempt, err)
-				if attempt < maxRetries {
-					time.Sleep(retryInterval)
-					continue
-				}
-				return nil, err
-			}
-
-			if balanceResult.ModifiedCount == 1 {
-				logs.Logger.Infof("Balance successfully updated for user %s after %d attempt(s)", apiWalletUser.UserID, attempt)
-				break
-			} else {
-				logs.Logger.Warnf("Attempt %d: No document modified for user %s", attempt, apiWalletUser.UserID)
-				if attempt < maxRetries {
-					time.Sleep(retryInterval)
-					continue
-				}
-				return nil, errors.New("failed to update balance after multiple retries")
-			}
+		balanceUpdate := bson.M{
+			"$inc": bson.M{"balance": price},
+		}
+		balanceFilter := bson.M{"userId": apiWalletUser.UserID}
+		balanceResult, err := apiWalletColl.UpdateOne(sc, balanceFilter, balanceUpdate)
+		if err != nil {
+			return nil, err
+		}
+		if balanceResult.ModifiedCount == 0 {
+			return nil, errors.New("balance update failed, no document modified")
 		}
 
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			transactionUpdateFilter := bson.M{"id": id, "server": server}
-			transactionUpdate := bson.M{
-				"$set": bson.M{
-					"status":    "CANCELLED",
-					"date_time": formattedData,
-				},
-			}
-
-			transactionResult, err := transactionCollection.UpdateOne(sc, transactionUpdateFilter, transactionUpdate)
-			if err != nil {
-				logs.Logger.Errorf("Attempt %d: Error updating transaction status: %v", attempt, err)
-				if attempt < maxRetries {
-					time.Sleep(retryInterval)
-					continue
-				}
-				return nil, err
-			}
-
-			if transactionResult.ModifiedCount == 1 {
-				logs.Logger.Infof("Transaction successfully updated for ID %s after %d attempt(s)", id, attempt)
-				break
-			} else {
-				logs.Logger.Warnf("Attempt %d: No document modified for ID %s with filter %v", attempt, id, transactionUpdateFilter)
-				if attempt < maxRetries {
-					time.Sleep(retryInterval)
-					continue
-				}
-				return nil, errors.New("failed to update transaction status after multiple retries")
-			}
+		transactionUpdateFilter := bson.M{"id": id, "server": server}
+		transactionUpdate := bson.M{
+			"$set": bson.M{
+				"status":    "CANCELLED",
+				"date_time": formattedData,
+			},
 		}
-
+		transactionResult, err := transactionCollection.UpdateOne(sc, transactionUpdateFilter, transactionUpdate)
+		if err != nil {
+			return nil, err
+		}
+		if transactionResult.ModifiedCount == 0 {
+			return nil, errors.New("transaction status update failed, no document modified")
+		}
 		return nil, nil
 	})
 	if err != nil {
 		logs.Logger.Error("Transaction failed:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-	logs.Logger.Infof("Successfully updated balance and transaction status for ID %s", id)
 
+	logs.Logger.Info("Transaction completed successfully")
 	_, err = orderCollection.DeleteOne(context.TODO(), bson.M{"numberId": id})
 	if err != nil {
 		logs.Logger.Error(err)

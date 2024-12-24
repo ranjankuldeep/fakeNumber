@@ -19,6 +19,12 @@ type OTP struct {
 }
 
 // InitializeVerifyOTPCollection initializes the collection for "verifyOtp"
+func InitializeOTPCollection(db *mongo.Database) *mongo.Collection {
+	collection := db.Collection("otp")
+	return collection
+}
+
+// InitializeVerifyOTPCollection initializes the collection for "verifyOtp"
 func InitializeVerifyOTPCollection(db *mongo.Database) *mongo.Collection {
 	collection := db.Collection("verifyOtp")
 	return collection

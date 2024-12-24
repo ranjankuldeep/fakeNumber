@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -30,10 +29,8 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 	e := echo.New()
-	username := os.Getenv("MONGODB_USERNAME")
-	password := os.Getenv("MONGODB_PASSWORD")
 	databaseName := os.Getenv("MONGODB_DATABASE")
-	uri := fmt.Sprintf("mongodb+srv://%s:%s@paidsmsnew.bjtzwk2.mongodb.net/%s?retryWrites=true&w=majority&appName=paidsmsnew", username, password, databaseName)
+	uri := os.Getenv("MONGODB_URI")
 	log.Println(uri)
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
@@ -42,7 +39,7 @@ func main() {
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}))
-	client, err := database.ConnectDB(uri)
+	client, err := database.ConnectDB(databaseName, uri)
 	if err != nil {
 		log.Fatal("Error initializing MongoDB connection:", err)
 	}

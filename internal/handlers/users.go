@@ -128,6 +128,7 @@ func generateOTP() (string, error) {
 
 // Handler function for signup
 func SignUp(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
 	log.Println("INFO: Starting SignUp handler")
 
 	var req SignupRequest
@@ -188,7 +189,7 @@ func SignUp(c echo.Context) error {
 
 	// Store OTP for the user in the database
 	log.Println("INFO: Storing OTP in the database")
-	if err := storeOTP(req.Email, otp); err != nil {
+	if err := storeOTP(db, req.Email, otp); err != nil {
 		log.Println("ERROR: Failed to store OTP:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to store OTP"})
 	}
@@ -242,22 +243,15 @@ type OTP struct {
 	ExpiresAt time.Time `bson:"expiresAt"`
 }
 
-const OTPExpirationTime = 5 * time.Minute // Adjust expiration time as needed
+const OTPExpirationTime = 5 * time.Minute
 
 func hashOTP(otp string) string {
 	hash := sha256.Sum256([]byte(otp))
 	return hex.EncodeToString(hash[:])
 }
 
-func storeOTP(email string, otp string) error {
-	db, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb+srv://paidsms:11dce015@paidsmsnew.bjtzwk2.mongodb.net/paidsmsnew?retryWrites=true&w=majority&appName=paidsmsnew"))
-	if err != nil {
-		log.Println("ERROR: Failed to connect to MongoDB:", err)
-		return err
-	}
-	defer db.Disconnect(context.Background())
-
-	otpCollection := db.Database("paidsmsnew").Collection("otp")
+func storeOTP(db *mongo.Database, email string, otp string) error {
+	otpCollection := models.InitializeOTPCollection(db)
 	hashedOTP := hashOTP(otp)
 	filter := bson.M{"email": email}
 
@@ -273,7 +267,7 @@ func storeOTP(email string, otp string) error {
 
 	// Upsert the document: update if it exists, insert if it doesn't
 	opts := options.Update().SetUpsert(true)
-	_, err = otpCollection.UpdateOne(context.Background(), filter, update, opts)
+	_, err := otpCollection.UpdateOne(context.Background(), filter, update, opts)
 	if err != nil {
 		log.Println("ERROR: Failed to upsert OTP:", err)
 		return err
@@ -669,8 +663,8 @@ type ResendForgotOTPRequest struct {
 // ResendForgotOTP handles the logic for resending the OTP
 func ResendForgotOTP(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userCol := db.Collection("users")
-	otpCol := db.Collection("otp")
+	userCol := models.InitializeUserCollection(db)
+	otpCol := models.InitializeOTPCollection(db)
 
 	var request ResendForgotOTPRequest
 	if err := c.Bind(&request); err != nil {
@@ -734,7 +728,7 @@ type ForgotVerifyOTPRequest struct {
 // ForgotVerifyOTP handles the OTP verification process
 func ForgotVerifyOTP(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	otpCol := db.Collection("forgototps") // Ensure this collection corresponds to where OTPs are stored
+	otpCol := models.InitializeForgotOTPCollection(db) // Ensure this collection corresponds to where OTPs are stored
 
 	var request ForgotVerifyOTPRequest
 	if err := c.Bind(&request); err != nil {
@@ -787,8 +781,8 @@ type ChangePasswordUnauthenticatedRequest struct {
 // ChangePasswordUnauthenticated handles changing the password without authentication
 func ChangePasswordUnauthenticated(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
-	userCol := db.Collection("users")
-	otpCol := db.Collection("forgototps") // Ensure this collection corresponds to where OTPs are stored
+	userCol := models.InitializeUserCollection(db)
+	otpCol := models.InitializeForgotOTPCollection(db)
 
 	var request ChangePasswordUnauthenticatedRequest
 	if err := c.Bind(&request); err != nil {
@@ -1222,7 +1216,7 @@ func GetOrdersByUserId(c echo.Context) error {
 func VerifyOTP(c echo.Context) error {
 	db := c.Get("db").(*mongo.Database)
 	userCol := models.InitializeUserCollection(db)
-	otpCol := db.Collection("otp")
+	otpCol := models.InitializeOTPCollection(db)
 	apiWalletCol := models.InitializeApiWalletuserCollection(db)
 
 	type RequestBody struct {
@@ -1317,6 +1311,7 @@ type EmailRequest struct {
 }
 
 func ResendOTP(c echo.Context) error {
+	db := c.Get("db").(*mongo.Database)
 	var req EmailRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
@@ -1345,7 +1340,7 @@ func ResendOTP(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to send OTP"})
 	}
 
-	err := storeOTP(email, newOtp)
+	err := storeOTP(db, email, newOtp)
 	if err != nil {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to send OTP"})

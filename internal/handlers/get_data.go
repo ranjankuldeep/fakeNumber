@@ -170,14 +170,20 @@ func GetServiceData(c echo.Context) error {
 	}
 	filteredData := []ServiceUserResponse{}
 	seenServices := make(map[string]bool)
+
 	for _, service := range services {
+		if service.Name == "" {
+			continue
+		}
+
 		if seenServices[service.Name] {
 			continue
 		}
 		seenServices[service.Name] = true
+
 		serverDetails := []ServerUserDetail{}
 		for _, server := range service.Servers {
-			if server.Block == true {
+			if server.Block {
 				continue
 			}
 			if contains(maintenanceServerNumbers, server.Server) {
@@ -194,16 +200,23 @@ func GetServiceData(c echo.Context) error {
 				Otp:    server.Otp,
 			})
 		}
+
+		if len(serverDetails) == 0 {
+			continue
+		}
+
 		sort.Slice(serverDetails, func(i, j int) bool {
 			iServer, _ := strconv.Atoi(serverDetails[i].Server)
 			jServer, _ := strconv.Atoi(serverDetails[j].Server)
 			return iServer < jServer
 		})
+
 		filteredData = append(filteredData, ServiceUserResponse{
 			Name:    service.Name,
 			Servers: serverDetails,
 		})
 	}
+
 	sort.Slice(filteredData, func(i, j int) bool {
 		return filteredData[i].Name < filteredData[j].Name
 	})
@@ -279,6 +292,9 @@ func GetUserServiceData(c echo.Context) error {
 	filteredData := []ServiceResponse{}
 	seenServices := make(map[string]bool)
 	for _, service := range services {
+		if service.Name == "" {
+			continue
+		}
 		if seenServices[service.Name] {
 			continue
 		}
@@ -293,7 +309,6 @@ func GetUserServiceData(c echo.Context) error {
 			}
 
 			discount := CalculateDiscount(serviceDiscounts, serverDiscounts, userDiscounts, service.Name, server.Server, apiUser.UserID.Hex())
-			logs.Logger.Info(discount)
 			price, _ := strconv.ParseFloat(server.Price, 64)
 			adjustedPrice := strconv.FormatFloat(price+discount, 'f', 2, 64)
 			otpType := "unknown"

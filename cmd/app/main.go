@@ -31,7 +31,6 @@ func main() {
 	e := echo.New()
 	databaseName := os.Getenv("MONGODB_DATABASE")
 	uri := os.Getenv("MONGODB_URI")
-	log.Println(uri)
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:5174", "https://paidsms.in", "https://makapyar.paidsms.in"},

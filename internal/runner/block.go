@@ -124,7 +124,6 @@ func CheckAndBlockUsers(db *mongo.Database) {
 
 	blockToggler, err := FetchBlockStatus(context.TODO(), db)
 	if err != nil {
-		logs.Logger.Error(err)
 		return
 	}
 	if blockToggler == false {

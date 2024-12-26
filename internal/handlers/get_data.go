@@ -402,6 +402,9 @@ func GetServiceDataAdmin(c echo.Context) error {
 	filteredData := []ServiceResponseAdmin{}
 	seenServices := make(map[string]bool)
 	for _, service := range services {
+		if service.Name == "" {
+			continue
+		}
 		if seenServices[service.Name] {
 			continue
 		}

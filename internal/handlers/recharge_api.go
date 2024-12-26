@@ -392,7 +392,7 @@ func RechargeTrxApi(c echo.Context) error {
 
 func ExchangeRate(c echo.Context) error {
 	log.Println("INFO: ExchangeRate endpoint invoked")
-	apiURL := "https://own5k.in/p/trxprice.php"
+	apiURL := "https://php.paidsms.in/trxprice.php"
 
 	resp, err := http.Get(apiURL)
 	if err != nil {

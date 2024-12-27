@@ -244,11 +244,11 @@ func RechargeTrxApi(c echo.Context) error {
 		})
 	}
 
-	if trxData.TRX <= 1 {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid TRX transaction",
-		})
-	}
+	// if trxData.TRX <= 1 {
+	// 	return c.JSON(http.StatusBadRequest, map[string]string{
+	// 		"error": "Invalid TRX transaction",
+	// 	})
+	// }
 
 	price := trxData.TRX * exchangeRate
 	amount := strconv.FormatFloat(price, 'f', 2, 64)

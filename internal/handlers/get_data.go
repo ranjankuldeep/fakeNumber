@@ -117,9 +117,6 @@ type ServiceUserResponse struct {
 
 func GetServiceData(c echo.Context) error {
 	userId := c.QueryParam("userId")
-	if userId == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "userId is empty"})
-	}
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := models.InitializeServerCollection(db)
 	serviceCollection := models.InitializeServerListCollection(db)

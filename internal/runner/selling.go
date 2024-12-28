@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -172,37 +173,32 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 	details.RechargeDetails.Total = dailyTotalRechargeAmount
 
 	// 4. Fetch Website Balance (Total Recharge Amount Irrespective of Time)
-	totalRechargePipeline := mongo.Pipeline{
-		bson.D{{Key: "$addFields", Value: bson.D{
-			{Key: "amount", Value: bson.D{{Key: "$toDouble", Value: "$amount"}}}, // Convert amount to double
-		}}},
-		bson.D{{Key: "$match", Value: bson.D{
-			{Key: "status", Value: "Received"},                       // Only successful recharges
-			{Key: "amount", Value: bson.D{{Key: "$ne", Value: nil}}}, // Exclude null amounts
-		}}},
+	apiWalletCollection := models.InitializeApiWalletuserCollection(db)
+	apiWalletPipeline := mongo.Pipeline{
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: nil}, // Group all records
-			{Key: "totalAmount", Value: bson.D{{Key: "$sum", Value: "$amount"}}}, // Sum all amounts
+			{Key: "totalBalance", Value: bson.D{{Key: "$sum", Value: "$balance"}}}, // Sum all balances
 		}}},
 	}
 
-	cursor, err = rechargeCollection.Aggregate(ctx, totalRechargePipeline)
+	cursor, err = apiWalletCollection.Aggregate(ctx, apiWalletPipeline)
 	if err != nil {
-		return details, fmt.Errorf("failed to aggregate total recharge data: %w", err)
+		return details, fmt.Errorf("failed to aggregate API wallet balances: %w", err)
 	}
 	defer cursor.Close(ctx)
 
 	if cursor.Next(ctx) {
-		var totalResult struct {
-			TotalAmount float64 `bson:"totalAmount"`
+		var apiWalletResult struct {
+			TotalBalance float64 `bson:"totalBalance"`
 		}
-		if err := cursor.Decode(&totalResult); err != nil {
-			return details, fmt.Errorf("failed to decode total recharge data: %w", err)
+		if err := cursor.Decode(&apiWalletResult); err != nil {
+			return details, fmt.Errorf("failed to decode API wallet balances: %w", err)
 		}
 
 		// Set Website Balance
-		details.WebsiteBalance = totalResult.TotalAmount
+		details.WebsiteBalance = math.Round(apiWalletResult.TotalBalance*100) / 100
 	}
+
 	// Set the daily total recharge amount
 	details.RechargeDetails.Total = dailyTotalRechargeAmount
 
@@ -250,11 +246,12 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 			details.ServersBalance["SMS-Man"] = formattedBalance
 		}
 	}
-	// Send selling details via TeleBot
-	err = services.SellingTeleBot(details)
-	if err != nil {
-		logs.Logger.Errorf("Error sending selling message")
-	}
+	logs.Logger.Info(details)
+	// // Send selling details via TeleBot
+	// err = services.SellingTeleBot(details)
+	// if err != nil {
+	// 	logs.Logger.Errorf("Error sending selling message")
+	// }
 	return details, nil
 }
 

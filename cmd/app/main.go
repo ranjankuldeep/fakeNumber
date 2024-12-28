@@ -84,7 +84,8 @@ func main() {
 			time.Sleep(1 * time.Second)
 		}
 	}()
-	go runner.StartSellingTicker(db)
+	// go runner.StartSellingTicker(db)
+	go runner.SendSellingUpdate(db)
 	e.Logger.Fatal(e.Start(":8000"))
 }
 

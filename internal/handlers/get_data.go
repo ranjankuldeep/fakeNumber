@@ -117,6 +117,9 @@ type ServiceUserResponse struct {
 
 func GetServiceData(c echo.Context) error {
 	userId := c.QueryParam("userId")
+	if userId == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "userId is empty"})
+	}
 	db := c.Get("db").(*mongo.Database)
 	serverCollection := models.InitializeServerCollection(db)
 	serviceCollection := models.InitializeServerListCollection(db)
@@ -288,6 +291,7 @@ func GetUserServiceData(c echo.Context) error {
 		log.Println(err)
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Internal server error"})
 	}
+	logs.Logger.Info(userDiscounts)
 
 	filteredData := []ServiceResponse{}
 	seenServices := make(map[string]bool)
@@ -489,6 +493,7 @@ func loadDiscounts(serviceDiscountCollection, serverDiscountCollection, userDisc
 			}
 		}
 	}
+	logs.Logger.Info(userDiscounts)
 	return serviceDiscounts, serverDiscounts, userDiscounts, nil
 }
 

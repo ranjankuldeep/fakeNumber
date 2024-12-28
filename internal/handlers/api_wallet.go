@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"time"
 
@@ -331,7 +332,7 @@ func UpdateWalletBalanceHandler(c echo.Context) error {
 		"_id": userObjectID,
 	}).Decode(&user)
 
-	update := bson.M{"$set": bson.M{"balance": requestBody.NewBalance}}
+	update := bson.M{"$set": bson.M{"balance": math.Round(requestBody.NewBalance*100) / 100}}
 	logs.Logger.Info("Updating user balance in the database")
 	_, err = walletCol.UpdateOne(ctx, bson.M{"userId": userObjectID}, update)
 	if err != nil {

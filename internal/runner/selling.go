@@ -246,12 +246,11 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 			details.ServersBalance["SMS-Man"] = formattedBalance
 		}
 	}
-	logs.Logger.Info(details)
-	// // Send selling details via TeleBot
-	// err = services.SellingTeleBot(details)
-	// if err != nil {
-	// 	logs.Logger.Errorf("Error sending selling message")
-	// }
+	// Send selling details via TeleBot
+	err = services.SellingTeleBot(details)
+	if err != nil {
+		logs.Logger.Errorf("Error sending selling message")
+	}
 	return details, nil
 }
 

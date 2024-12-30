@@ -20,9 +20,14 @@ import (
 func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error) {
 	var details services.SellingUpdateDetails
 	ctx := context.TODO()
-	// Get the current date
-	startOfDay := time.Now().Truncate(24 * time.Hour)            // Start of the day (12:00am)
-	endOfDay := startOfDay.Add(24 * time.Hour).Add(-time.Second) // End of the day (11:59:59pm)
+	ist := time.FixedZone("IST", 5*3600+30*60)
+
+	now := time.Now().In(ist)
+
+	startOfDayTemp := time.Date(now.Year(), now.Month(), now.Day(), 1, 35, 0, 0, ist)
+	endOfDayTemp := startOfDayTemp.Add(24 * time.Hour).Add(-time.Second)
+	startOfDayStr := startOfDayTemp.Format("2006-01-02T15:04:05")
+	endOfDayStr := endOfDayTemp.Format("2006-01-02T15:04:05")
 
 	// 1. Fetch Total User Count
 	usersCollection := models.InitializeUserCollection(db)
@@ -34,19 +39,20 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 
 	// 2. Fetch Transaction Details
 	transactionCollection := models.InitializeTransactionHistoryCollection(db)
-	// Aggregate total sold, cancelled, and pending
 	transactionsPipeline := mongo.Pipeline{
 		bson.D{{Key: "$match", Value: bson.D{
-			{Key: "createdAt", Value: bson.D{
-				{Key: "$gte", Value: startOfDay},
-				{Key: "$lte", Value: endOfDay},
+			{Key: "date_time", Value: bson.D{
+				{Key: "$gte", Value: startOfDayStr},
+				{Key: "$lte", Value: endOfDayStr},
 			}},
 		}}},
+		// Group by status and count
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: "$status"},
 			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
 		}}},
 	}
+
 	cursor, err := transactionCollection.Aggregate(ctx, transactionsPipeline)
 	if err != nil {
 		return details, fmt.Errorf("failed to aggregate transaction data: %w", err)
@@ -77,9 +83,9 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 	serverPipeline := mongo.Pipeline{
 		bson.D{{Key: "$match", Value: bson.D{
 			{Key: "status", Value: "SUCCESS"},
-			{Key: "createdAt", Value: bson.D{
-				{Key: "$gte", Value: startOfDay},
-				{Key: "$lte", Value: endOfDay},
+			{Key: "date_time", Value: bson.D{
+				{Key: "$gte", Value: startOfDayStr},
+				{Key: "$lte", Value: endOfDayStr},
 			}},
 		}}},
 		bson.D{{Key: "$group", Value: bson.D{
@@ -127,9 +133,9 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 		bson.D{{Key: "$match", Value: bson.D{
 			{Key: "status", Value: "Received"},                       // Only successful recharges
 			{Key: "amount", Value: bson.D{{Key: "$ne", Value: nil}}}, // Exclude null amounts
-			{Key: "createdAt", Value: bson.D{
-				{Key: "$gte", Value: startOfDay},
-				{Key: "$lte", Value: endOfDay},
+			{Key: "date_time", Value: bson.D{
+				{Key: "$gte", Value: startOfDayStr},
+				{Key: "$lte", Value: endOfDayStr},
 			}}, // Match the specific day
 		}}},
 		bson.D{{Key: "$group", Value: bson.D{
@@ -251,6 +257,7 @@ func SendSellingUpdate(db *mongo.Database) (services.SellingUpdateDetails, error
 	if err != nil {
 		logs.Logger.Errorf("Error sending selling message")
 	}
+	log.Printf("%+v", details)
 	return details, nil
 }
 

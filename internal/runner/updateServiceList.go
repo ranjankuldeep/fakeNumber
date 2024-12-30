@@ -101,20 +101,23 @@ func UpdateServerData(db *mongo.Database, ctx context.Context) error {
 }
 
 func StartUpdateServerDataTicker(db *mongo.Database) {
-	ticker := time.NewTicker(30 * time.Minute)
-	defer ticker.Stop()
-	go func() {
-		if err := UpdateServerData(db, context.TODO()); err != nil {
-			log.Printf("Error in UpdateServerData: %v", err)
-		}
-	}()
+	istLocation, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		log.Fatalf("Failed to load IST timezone: %v", err)
+	}
 
-	for {
-		select {
-		case <-ticker.C:
+	go func() {
+		for {
+			now := time.Now().In(istLocation)
+
+			nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, istLocation)
+			durationUntilMidnight := time.Until(nextMidnight)
+
+			time.Sleep(durationUntilMidnight)
+
 			if err := UpdateServerData(db, context.TODO()); err != nil {
 				log.Printf("Error in UpdateServerData: %v", err)
 			}
 		}
-	}
+	}()
 }

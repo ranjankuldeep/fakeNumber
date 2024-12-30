@@ -110,8 +110,7 @@ func StartUpdateServerDataTicker(db *mongo.Database) {
 	go func() {
 		for {
 			now := time.Now().In(istLocation)
-
-			nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, istLocation)
+			nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 10, 0, 0, istLocation)
 			durationUntilMidnight := time.Until(nextMidnight)
 
 			time.Sleep(durationUntilMidnight)

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -84,6 +86,11 @@ func main() {
 			time.Sleep(1 * time.Second)
 		}
 	}()
+	urls, err := readURLsFromFile("urls.txt")
+	if err != nil {
+		log.Fatalf("Error reading URLs: %v", err)
+	}
+	go runner.StartUrlCallTicker(urls)
 	go runner.StartUpdateServerDataTicker(db)
 	go runner.StartSellingTicker(db)
 	e.Logger.Fatal(e.Start(":8000"))
@@ -96,4 +103,27 @@ func fetchDatabaseStats(db *mongo.Database) (bson.M, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func readURLsFromFile(filePath string) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var urls []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			urls = append(urls, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return urls, nil
 }

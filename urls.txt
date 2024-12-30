@@ -1,0 +1,11 @@
+https://php.paidsms.in/fastsms.php
+https://php.paidsms.in/5sim.php
+https://php.paidsms.in/smshub.php
+https://php.paidsms.in/tigersms.php
+https://php.paidsms.in/grizzlysms.php
+https://php.paidsms.in/tempnumber.php
+https://php.paidsms.in/smsbower.php
+https://php.paidsms.in/smsactivate.php
+https://php.paidsms.in/cpay.php
+https://php.paidsms.in/smsactivationservice.php
+https://php.paidsms.in/smsman.php

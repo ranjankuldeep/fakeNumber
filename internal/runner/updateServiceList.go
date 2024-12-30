@@ -58,7 +58,7 @@ func FetchServerData(url string) ([]ServerListUpload, error) {
 }
 
 func UpdateServerData(db *mongo.Database, ctx context.Context) error {
-	url := "https://php.paidsms.org/final.php"
+	url := "https://php.paidsms.in/final.php"
 	serverData, err := FetchServerData(url)
 	if err != nil {
 		logs.Logger.Error(err)
@@ -97,6 +97,7 @@ func UpdateServerData(db *mongo.Database, ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert data in batch: %w", err)
 	}
+	logs.Logger.Info("ServiceList Update Done")
 	return nil
 }
 

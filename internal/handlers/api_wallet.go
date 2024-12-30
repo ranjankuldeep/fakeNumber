@@ -81,7 +81,8 @@ func BalanceHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusNotFound, echo.Map{"error": "Invalid Api Key"})
 	}
-	return c.JSON(http.StatusOK, echo.Map{"balance": user.Balance})
+	roundedBalance := math.Round(user.Balance*100) / 100
+	return c.JSON(http.StatusOK, echo.Map{"balance": roundedBalance})
 }
 
 func ChangeAPIKeyHandler(c echo.Context) error {

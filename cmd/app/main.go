@@ -83,7 +83,7 @@ func main() {
 	go func() {
 		for {
 			runner.CheckAndBlockUsers(db)
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Second)
 		}
 	}()
 	urls, err := readURLsFromFile("urls.txt")

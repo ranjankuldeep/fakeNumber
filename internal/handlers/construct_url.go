@@ -93,16 +93,16 @@ func constructApiUrl(db *mongo.Database, server, apiKeyServer string, apiToken s
 		}, nil
 
 	case "8":
-		priceFloat, err := strconv.ParseFloat(data.Price, 64)
-		if err != nil {
-			return ApiRequest{}, fmt.Errorf("invalid price for server %d: %v", serverNumber, err)
-		}
-		priceFloat = (priceFloat - marginMap[serverNumber]) / exchangeMap[serverNumber]
-		priceStr := fmt.Sprintf("%.2f", priceFloat)
+		// priceFloat, err := strconv.ParseFloat(data.Price, 64)
+		// if err != nil {
+		// 	return ApiRequest{}, fmt.Errorf("invalid price for server %d: %v", serverNumber, err)
+		// }
+		// priceFloat = (priceFloat - marginMap[serverNumber]) / exchangeMap[serverNumber]
+		// priceStr := fmt.Sprintf("%.2f", priceFloat)
 		return ApiRequest{
 			URL: fmt.Sprintf(
-				"https://api.sms-activate.guru/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22&maxPrice=%s",
-				apiKeyServer, data.Code, priceStr,
+				"https://api.sms-activate.guru/stubs/handler_api.php?api_key=%s&action=getNumber&service=%s&operator=any&country=22",
+				apiKeyServer, data.Code,
 			),
 			Headers: map[string]string{}, // Empty headers
 		}, nil

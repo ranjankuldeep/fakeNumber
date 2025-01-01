@@ -30,7 +30,7 @@ func constructApiUrl(db *mongo.Database, server, apiKeyServer string, apiToken s
 		return ApiRequest{
 			URL: fmt.Sprintf("https://5sim.net/v1/user/buy/activation/india/any/%s", data.Code),
 			Headers: map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", apiToken),
+				"Authorization": fmt.Sprintf("Bearer %s", apiKeyServer),
 				"Accept":        "application/json",
 			},
 		}, nil

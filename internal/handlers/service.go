@@ -190,7 +190,7 @@ func HandleGetNumberRequest(c echo.Context) error {
 		logs.Logger.Error(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
-
+	// added
 	numData, err := ExtractNumber(server, apiURLRequest)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

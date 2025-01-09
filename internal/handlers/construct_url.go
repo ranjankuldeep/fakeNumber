@@ -201,7 +201,7 @@ func constructOtpUrl(server, apiKeyServer, token, id string) (ApiRequest, error)
 		}, nil
 	case "11":
 		return ApiRequest{
-			URL:     fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", token, id),
+			URL:     fmt.Sprintf("https://api.sms-man.com/control/get-sms?token=%s&request_id=%s", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	default:
@@ -263,7 +263,7 @@ func ConstructNumberUrl(server, apiKeyServer, token, id, number string) (ApiRequ
 		}, nil
 	case "11":
 		return ApiRequest{
-			URL:     fmt.Sprintf("https://api2.sms-man.com/control/set-status?token=%s&request_id=%s&status=reject", token, id),
+			URL:     fmt.Sprintf("https://api2.sms-man.com/control/set-status?token=%s&request_id=%s&status=reject", apiKeyServer, id),
 			Headers: map[string]string{},
 		}, nil
 	default:

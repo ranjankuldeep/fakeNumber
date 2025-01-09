@@ -104,7 +104,6 @@ func BlockFraudClear(c echo.Context) error {
 	rechargeHistoryCol := models.InitializeRechargeHistoryCollection(db)
 	transactionHistoryCol := models.InitializeTransactionHistoryCollection(db)
 	userCollection := models.InitializeUserCollection(db)
-	logs.Logger.Info("I have been called to block user")
 
 	userId := c.QueryParam("userId")
 	if userId == "" {
@@ -128,22 +127,22 @@ func BlockFraudClear(c echo.Context) error {
 
 	_, err = rechargeHistoryCol.DeleteMany(ctx, bson.M{"userId": userId})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error clearing recharge history"})
+		logs.Logger.Info("Error clearing recharge history")
 	}
 
 	_, err = transactionHistoryCol.DeleteMany(ctx, bson.M{"userId": userId})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error clearing transaction history"})
+		logs.Logger.Info("Error clearing transaction history")
 	}
 
 	_, err = walletCol.DeleteOne(ctx, bson.M{"userId": objID})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error deleting walletUser from the collection"})
+		logs.Logger.Info("Error deleting walletUser from the collection")
 	}
 
 	_, err = userCollection.DeleteOne(ctx, bson.M{"_id": objID})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error deleting user from the collection"})
+		logs.Logger.Info("Error deleting user from the collection")
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{"message": "User data cleared successfully"})

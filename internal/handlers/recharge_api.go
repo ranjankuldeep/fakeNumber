@@ -33,10 +33,10 @@ type UpiRequest struct {
 }
 
 type UpiResponse struct {
-	Name   string `json:"name,omitempty"`
-	Amount int    `json:"amount,omitempty"`
-	Date   string `json:"date,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Name   string  `json:"name,omitempty"`
+	Amount float64 `json:"amount,omitempty"`
+	Date   string  `json:"date,omitempty"`
+	Error  string  `json:"error,omitempty"`
 }
 
 type IpDetails struct {
@@ -165,7 +165,7 @@ func RechargeUpiApi(c echo.Context) error {
 		Email:   user.Email,
 		UserID:  userId,
 		TrnID:   transactionId,
-		Amount:  fmt.Sprintf("%d", upiData.Amount),
+		Amount:  fmt.Sprintf("%0.2f", upiData.Amount),
 		Balance: fmt.Sprintf("%0.2f", apiWalletUser.Balance),
 		IP:      ipDetail,
 	}
@@ -175,7 +175,7 @@ func RechargeUpiApi(c echo.Context) error {
 		logs.Logger.Error("Unable to send upi recharge message")
 	}
 	return c.JSON(http.StatusOK, map[string]string{
-		"message": fmt.Sprintf("%d₹ Added Successfully!", upiData.Amount),
+		"message": fmt.Sprintf("%0.2f₹ Added Successfully!", upiData.Amount),
 	})
 }
 

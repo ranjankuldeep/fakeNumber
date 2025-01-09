@@ -120,9 +120,9 @@ func BlockFraudClear(c echo.Context) error {
 	var user models.ApiWalletUser
 	err = walletCol.FindOne(ctx, bson.M{"userId": objID}).Decode(&user)
 	if err == mongo.ErrNoDocuments {
-		return c.JSON(http.StatusNotFound, echo.Map{"message": "User not found"})
+		logs.Logger.Info("User not found")
 	} else if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Error finding user"})
+		logs.Logger.Info("Error finding user")
 	}
 
 	_, err = rechargeHistoryCol.DeleteMany(ctx, bson.M{"userId": userId})

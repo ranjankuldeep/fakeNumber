@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -79,6 +80,21 @@ func FetchMarginAndExchangeRate(ctx context.Context, db *mongo.Database) (map[in
 	return marginMap, exchangeRateMap, nil
 }
 
+var (
+	userNumberLocks = make(map[string]*sync.Mutex)
+	lock            sync.Mutex
+)
+
+func getUserMutex(apikey string) *sync.Mutex {
+	lock.Lock()
+	defer lock.Unlock()
+
+	if _, exists := userNumberLocks[apikey]; !exists {
+		userNumberLocks[apikey] = &sync.Mutex{}
+	}
+	return userNumberLocks[apikey]
+}
+
 func HandleGetNumberRequest(c echo.Context) error {
 	ctx := context.TODO()
 	db := c.Get("db").(*mongo.Database)
@@ -114,6 +130,10 @@ func HandleGetNumberRequest(c echo.Context) error {
 	if server0.Maintenance == true {
 		return c.JSON(http.StatusOK, map[string]string{"error": "site is under maintenance"})
 	}
+
+	userMutex := getUserMutex(apiKey)
+	userMutex.Lock()
+	defer userMutex.Unlock()
 
 	apiWalletUserCollection := models.InitializeApiWalletuserCollection(db)
 	var apiWalletUser models.ApiWalletUser
@@ -476,6 +496,11 @@ func HandleGetOtp(c echo.Context) error {
 	id := c.QueryParam("id")
 	apiKey := c.QueryParam("apikey")
 	server := c.QueryParam("server")
+	serverNumber, err := strconv.Atoi(server)
+	if err != nil {
+		logs.Logger.Error(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
 
 	if id == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "empty id"})
@@ -489,7 +514,7 @@ func HandleGetOtp(c echo.Context) error {
 
 	serverCollection := models.InitializeServerCollection(db)
 	var server0 models.Server
-	err := serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
+	err = serverCollection.FindOne(ctx, bson.M{"server": 0}).Decode(&server0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
@@ -598,17 +623,42 @@ func HandleGetOtp(c echo.Context) error {
 				logs.Logger.Error(err)
 			}
 
+			var serviceList models.ServerList
+			serverListCollection := models.InitializeServerListCollection(db)
+			logs.Logger.Info(existingEntry.Service)
+			err = serverListCollection.FindOne(
+				ctx,
+				bson.M{
+					"name":           transaction.Service,
+					"servers.server": serverNumber,
+				},
+				options.FindOne().SetProjection(bson.M{
+					"servers.$": 1,
+				}),
+			).Decode(&serviceList)
+
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					return c.JSON(http.StatusNotFound, map[string]string{"error": "server not found"})
+				}
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			}
+
+			s := serviceList.Servers[0]
+			serverData := models.ServerData{
+				Code: s.Code,
+			}
+
 			otpDetail := services.OTPDetails{
 				Email:       userData.Email,
 				ServiceName: transaction.Service,
-				ServiceCode: existingEntry.Service,
+				ServiceCode: serverData.Code,
 				Price:       transaction.Price,
 				Server:      transaction.Server,
 				Number:      transaction.Number,
 				OTP:         validOtp,
 				Ip:          ipDetail,
 			}
-
 			err = services.OtpGetDetails(otpDetail)
 			if err != nil {
 				logs.Logger.Error(err)
@@ -1156,7 +1206,7 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		} else if strings.HasPrefix(responseData, "STATUS_CANCEL") {
 			return nil
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 
 	case "2":
 		if strings.Contains(responseData, "order has sms") {
@@ -1172,14 +1222,14 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		if responseDataJSON["status"] == "CANCELED" {
 			return nil
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 
 	case "3":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") || strings.HasPrefix(responseData, "ALREADY_CANCELLED") ||
 			strings.HasPrefix(responseData, "ACCESS_ACTIVATION") {
 			return nil
 		} else {
-			return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+			return errors.New("Failed Try Again")
 		}
 	case "4":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
@@ -1189,45 +1239,45 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		} else if strings.HasPrefix(responseData, "BAD_STATUS") {
 			return errors.New("BAD_STATUS")
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	case "5":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
 		} else if strings.HasPrefix(responseData, "BAD_ACTION") {
 			return errors.New("BAD_ACTION")
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FROM_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	case "6":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
 		} else if strings.HasPrefix(responseData, "NO_ACTIVATION") {
 			return errors.New("NO_ACTIVATION")
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	case "8":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
 		} else if strings.HasPrefix(responseData, "BAD_STATUS") {
 			return errors.New("BAD_STATUS")
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	case "7":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
 		} else if strings.HasPrefix(responseData, "BAD_STATUS") {
 			return errors.New("BAD_STATUS")
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	case "9":
 		if strings.HasPrefix(responseData, "success") {
 			return nil
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	case "10":
 		if strings.HasPrefix(responseData, "ACCESS_CANCEL") {
 			return nil
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	case "11":
 		var responseDataJSON map[string]interface{}
 		err = json.Unmarshal(body, &responseDataJSON)
@@ -1239,7 +1289,7 @@ func CancelNumberThirdParty(apiURL, server, id string, db *mongo.Database, heade
 		} else if responseDataJSON["error_code"] == "change_status" {
 			return nil
 		}
-		return errors.New(fmt.Sprintf("NUMBER_REQUEST_FAILED_FOR_THIRD_PARTY_SERVER_%s", server))
+		return errors.New("Failed Try Again")
 	default:
 		return errors.New("INVALID_SERVER_VALUE")
 	}

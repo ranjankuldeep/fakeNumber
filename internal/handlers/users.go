@@ -218,7 +218,7 @@ func sendOTPByEmail(email, otp, text, subject string) error {
 	smtpPort := 587
 
 	smtpUser := os.Getenv("SMTP_USER")
-	smtpPass := os.Getenv("SMTP_PASS") // Replace with your email password or app-specific password
+	smtpPass := os.Getenv("SMTP_PASS")
 
 	// Create a new email message
 	message := gomail.NewMessage()

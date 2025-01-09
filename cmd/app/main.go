@@ -17,6 +17,7 @@ import (
 	"github.com/ranjankuldeep/fakeNumber/internal/lib"
 	"github.com/ranjankuldeep/fakeNumber/internal/routes"
 	"github.com/ranjankuldeep/fakeNumber/internal/runner"
+	"github.com/ranjankuldeep/fakeNumber/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -40,6 +41,7 @@ func main() {
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}))
+	logs.Logger.Info("isfjjjdfasjf")
 	client, err := database.ConnectDB(databaseName, uri)
 	if err != nil {
 		log.Fatal("Error initializing MongoDB connection:", err)
